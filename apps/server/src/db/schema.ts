@@ -33,8 +33,7 @@ export const addresses = pgTable(
   "addresses",
   {
     id: serial("id").primaryKey(),
-    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }), // Link to users table, cascade delete
-    hhgCode: text("hhg_code").unique().notNull(), // Unique Navify code for the address
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }), // Link to users table, cascade delete    hhgCode: text("hhg_code").unique().notNull(), // Unique Navify code for the address
     latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(), // Sufficient precision for coordinates
     longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
     street: text("street"),
