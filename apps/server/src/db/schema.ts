@@ -33,7 +33,8 @@ export const addresses = pgTable(
   "addresses",
   {
     id: serial("id").primaryKey(),
-    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }), // Link to users table, cascade delete    hhgCode: text("hhg_code").unique().notNull(), // Unique Navify code for the address
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }), // Link to users table, cascade delete
+    hhgCode: text("hhg_code").unique().notNull(), // Unique Navify code for the address
     latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(), // Sufficient precision for coordinates
     longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
     street: text("street"),
@@ -134,7 +135,7 @@ export const lgas = pgTable(
     id: serial("id").primaryKey(),
     name: varchar("name", { length: 150 }).notNull(),
     // 3-digit code, unique within a state (e.g., '001', '015')
-    code: varchar("code", { length: 3 }).notNull(),
+    code: varchar("code", { length: 3 }).notNull().unique(),
     // Foreign key linking to the state table using the state's unique code
     stateCode: varchar("state_code", { length: 2 })
       .notNull()

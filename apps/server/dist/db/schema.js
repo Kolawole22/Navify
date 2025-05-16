@@ -19,7 +19,7 @@ exports.users = (0, pg_core_1.pgTable)("users", {
 // Addresses Table
 exports.addresses = (0, pg_core_1.pgTable)("addresses", {
     id: (0, pg_core_1.serial)("id").primaryKey(),
-    userId: (0, pg_core_1.text)("user_id").references(() => exports.users.id, { onDelete: "cascade" }), // Link to users table, cascade delete
+    userId: (0, pg_core_1.uuid)("user_id").references(() => exports.users.id, { onDelete: "cascade" }), // Link to users table, cascade delete
     hhgCode: (0, pg_core_1.text)("hhg_code").unique().notNull(), // Unique Navify code for the address
     latitude: (0, pg_core_1.decimal)("latitude", { precision: 10, scale: 8 }).notNull(), // Sufficient precision for coordinates
     longitude: (0, pg_core_1.decimal)("longitude", { precision: 11, scale: 8 }).notNull(),
@@ -102,7 +102,7 @@ exports.lgas = (0, pg_core_1.pgTable)("lgas", {
     id: (0, pg_core_1.serial)("id").primaryKey(),
     name: (0, pg_core_1.varchar)("name", { length: 150 }).notNull(),
     // 3-digit code, unique within a state (e.g., '001', '015')
-    code: (0, pg_core_1.varchar)("code", { length: 3 }).notNull(),
+    code: (0, pg_core_1.varchar)("code", { length: 3 }).notNull().unique(),
     // Foreign key linking to the state table using the state's unique code
     stateCode: (0, pg_core_1.varchar)("state_code", { length: 2 })
         .notNull()
