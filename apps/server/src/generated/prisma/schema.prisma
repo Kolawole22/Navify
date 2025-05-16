@@ -1,0 +1,63 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model for authentication and profile
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String?
+  passwordHash String? // Store hashed password for email/password auth
+  phone        String?  @unique // Assuming phone might be used for login/verification
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  addresses Address[] // User can have multiple saved addresses
+  sessions  Session[] // User can have multiple active sessions
+}
+
+// Saved address model
+model Address {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  code     String   @unique // The unique Navify code (e.g., #NAV12345)
+  name     String // User-given name (e.g., Home, Office)
+  landmark String? // Optional landmark
+  notes    String? // Optional notes
+  tags     String[] // Array of tags (e.g., ["Home", "Favorite"])
+
+  latitude  Float
+  longitude Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId]) // Index for faster lookups by user
+}
+
+// Session model for managing user sessions (e.g., JWT refresh tokens)
+model Session {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  token     String   @unique // The refresh token itself
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}

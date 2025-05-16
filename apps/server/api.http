@@ -1,0 +1,185 @@
+# REST Client requests for Navify API
+# Docs: https://github.com/Huachao/vscode-restclient
+
+# --- Variables ---
+# @name baseUrl
+@baseUrl = http://localhost:3006/api
+
+# Set this after logging in or registering
+@authToken = Bearer YOUR_AUTH_TOKEN_HERE
+
+# Placeholder User/Address IDs (replace after creation)
+@testUserId = YOUR_USER_ID_HERE
+@testAddressId = YOUR_ADDRESS_ID_HERE
+@testAddressIdentifier = YOUR_ADDRESS_ID_OR_UNIQUE_CODE_HERE
+
+# Placeholder Phone/Email/Password (use realistic values)
+@testPhoneNumber = 2348012345678
+@testEmail = test@example.com
+@testPassword = password123
+
+###
+# ====================
+# Health Check
+# ====================
+
+# @name GetHealth
+GET http://localhost:3006/health
+
+###
+# ====================
+# Authentication
+# ====================
+
+# @name RequestOtp
+# Request an OTP for a phone number
+POST {{baseUrl}}/auth/request-otp
+Content-Type: application/json
+
+{
+  "phoneNumber": "{{testPhoneNumber}}"
+}
+
+###
+# @name VerifyOtp
+# Verify the OTP received (replace 123456 with actual OTP)
+POST {{baseUrl}}/auth/verify-otp
+Content-Type: application/json
+
+{
+  "phoneNumber": "{{testPhoneNumber}}",
+  "otp": "123456" 
+}
+
+###
+# @name Register
+# Register a new user after OTP verification (requires all fields)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "phoneNumber": "{{testPhoneNumber}}",
+  "firstName": "Test",
+  "lastName": "User",
+  "email": "{{testEmail}}",
+  "password": "{{testPassword}}",
+  "state": "Lagos",
+  "lga": "Ikeja",
+  "city": "Ikeja",
+  "street": "123 Test Street",
+  "houseNumber": "Apt 4B",
+  "landmark": "Near Big Tree",
+  "apartment": "Floor 2", 
+  "estate": "Test Estate",
+  "specialDescription": "Blue gate",
+  "photoUrls": ["http://example.com/photo1.jpg"],
+  "latitude": 6.5244,
+  "longitude": 3.3792
+}
+
+
+###
+# @name Login
+# Login with email and password
+# Set the @authToken variable above with the token from the response
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{testEmail}}",
+  "password": "{{testPassword}}"
+}
+
+###
+# @name GetCurrentUser
+# Get details for the currently authenticated user
+GET {{baseUrl}}/auth/me
+Authorization: {{authToken}}
+
+###
+# ====================
+# Users
+# ====================
+
+# @name GetAllUsers
+# Get a list of all users (Auth might be required depending on implementation)
+GET {{baseUrl}}/users
+# Authorization: {{authToken}} 
+
+###
+# @name GetUserById
+# Get a specific user by their ID (replace @testUserId)
+GET {{baseUrl}}/users/{{testUserId}}
+# Authorization: {{authToken}} 
+
+###
+# @name UpdateUser
+# Update a specific user (requires Auth, replace @testUserId)
+PUT {{baseUrl}}/users/{{testUserId}}
+Authorization: {{authToken}}
+Content-Type: application/json
+
+{
+  "firstName": "UpdatedFirstName",
+  "lastName": "UpdatedLastName"
+}
+
+###
+# @name DeleteUser
+# Delete a specific user (requires Auth, replace @testUserId)
+DELETE {{baseUrl}}/users/{{testUserId}}
+Authorization: {{authToken}}
+
+###
+# ====================
+# Addresses
+# ====================
+
+# @name CreateAddress
+# Create a new address (requires Auth)
+# NOTE: This endpoint might not be needed if address is created during registration
+#       If it exists, adjust the payload according to its controller
+POST {{baseUrl}}/addresses
+Authorization: {{authToken}}
+Content-Type: application/json
+
+{
+  "latitude": 6.5245,
+  "longitude": 3.3793,
+  "street": "456 Another St",
+  "state": "Ogun",
+  "lga": "Abeokuta South",
+  "city": "Abeokuta",
+  "label": "Work Address",
+  "isSaved": true
+}
+
+###
+# @name GetAllSavedAddresses
+# Get all addresses saved by the authenticated user
+GET {{baseUrl}}/addresses
+Authorization: {{authToken}}
+
+###
+# @name GetAddressByIdentifier
+# Get a specific address by DB ID or uniqueCode (replace @testAddressIdentifier)
+GET {{baseUrl}}/addresses/{{testAddressIdentifier}}
+Authorization: {{authToken}}
+
+###
+# @name UpdateAddress
+# Update address label or saved status (replace @testAddressId)
+PUT {{baseUrl}}/addresses/{{testAddressId}}
+Authorization: {{authToken}}
+Content-Type: application/json
+
+{
+  "label": "Updated Label",
+  "isSaved": false
+}
+
+###
+# @name DeleteAddress
+# Delete a specific saved address (replace @testAddressId)
+DELETE {{baseUrl}}/addresses/{{testAddressId}}
+Authorization: {{authToken}} 
