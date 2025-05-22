@@ -199,7 +199,7 @@ export const register = async (req: Request, res: Response) => {
         throw new Error("Internal error parsing generated address components.");
       }
       const stateCode = codeParts[1];
-      const lgaCode = codeParts[2];
+      const lgaCode = `${stateCode}${codeParts[2]}`; // e.g., LA + 015 = LA015
       // --- End HHG code generation ---
 
       // Create address (linked to user) using correct schema

@@ -1,6 +1,6 @@
 {
-  "id": "bb7b3b89-e632-485c-9e5b-01bf5fdf6332",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "b44f5ac7-a337-4b79-9e89-0aa1235af926",
+  "prevId": "bb7b3b89-e632-485c-9e5b-01bf5fdf6332",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -279,7 +279,7 @@
         },
         "code": {
           "name": "code",
-          "type": "varchar(3)",
+          "type": "varchar(5)",
           "primaryKey": false,
           "notNull": true
         },

@@ -135,7 +135,7 @@ export const lgas = pgTable(
     id: serial("id").primaryKey(),
     name: varchar("name", { length: 150 }).notNull(),
     // 3-digit code, unique within a state (e.g., '001', '015')
-    code: varchar("code", { length: 3 }).notNull().unique(),
+    code: varchar("code", { length: 5 }).notNull().unique(),
     // Foreign key linking to the state table using the state's unique code
     stateCode: varchar("state_code", { length: 2 })
       .notNull()

@@ -1,0 +1,1 @@
+ALTER TABLE "lgas" ALTER COLUMN "code" SET DATA TYPE varchar(5);
