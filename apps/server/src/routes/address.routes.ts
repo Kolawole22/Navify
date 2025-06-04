@@ -9,6 +9,7 @@ import {
 } from "../controllers/address.controller"; // Correct import path
 import wrapAsync from "../utils/wrapAsync"; // Import the wrapper
 import { protect } from "../middleware/auth.middleware"; // Import the actual JWT middleware
+import { Request, Response } from "express";
 
 const router = express.Router();
 
@@ -26,5 +27,34 @@ router.post("/", wrapAsync(createAddress));
 router.patch("/:id", wrapAsync(updateAddress)); // Changed PUT to PATCH for partial updates
 // router.put("/:id", wrapAsync(updateAddress)); // Kept PUT in case full update is needed later
 router.delete("/:id", wrapAsync(deleteAddress));
+
+// POST /api/addresses/rural-suggestions
+const getRuralSuggestions = async (req: Request, res: Response) => {
+  const { latitude, longitude, city, userInput } = req.body;
+
+  if (!latitude || !longitude || !city) {
+    res.status(400).json({
+      error: "Latitude, longitude, and city are required",
+    });
+  }
+
+  const { generateRuralAddressComponents } = await import(
+    "../utils/rural-addressing"
+  );
+
+  const suggestions = await generateRuralAddressComponents(
+    parseFloat(latitude),
+    parseFloat(longitude),
+    city,
+    userInput
+  );
+
+  res.status(200).json({
+    success: true,
+    data: suggestions,
+  });
+};
+
+router.post("/rural-suggestions", wrapAsync(getRuralSuggestions));
 
 export default router;

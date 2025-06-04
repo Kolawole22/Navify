@@ -1,18 +1,20 @@
 import { Request, Response } from "express";
 import { db } from "../db"; // Import Drizzle db instance
 import { addresses } from "../db/schema"; // Import Drizzle schemas
-import { eq, and, or, ilike } from "drizzle-orm"; // Import operators
+import { eq, and, or, ilike, SQL } from "drizzle-orm"; // Import operators and SQL type
 import { z } from "zod";
-import { SQL } from "drizzle-orm";
-import { generateHhgCode } from "../utils/addressing"; // Import the HHG code generator
+import { generateHhgCode, parseDDC } from "../utils/addressing"; // Import the DDC code generator and utilities
+import { generateLocationDescription, needsGeneratedStreetName } from "../utils/location-description"; // Import location description utilities
 
 // Validation Schema for Address Creation/Update
 // Aligned with Drizzle schema and project scope
 const addressInputSchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
-  street: z.string().min(1, "Street is required"),
+  street: z.string().optional(), // Make street optional to support addresses without street names
   city: z.string().min(1, "City is required"),
+  stateCode: z.string().length(2).optional(), // Two-letter state code (e.g., LA for Lagos)
+  lgaCode: z.string().optional(), // LGA code within the state
   houseNumber: z.string().optional(), // Make houseNumber optional based on schema
   estate: z.string().optional(),
   specialDescription: z.string().optional(),
@@ -159,13 +161,16 @@ export const createAddress = async (req: Request, res: Response) => {
 
     const inputData = validationResult.data;
 
-    // Generate the HHG code using the utility
-    const hhgCode = await generateHhgCode(
+    // Generate the Digital Door Code (DDC) using the utility
+    // Pass state and LGA codes if they're provided in the input
+    const ddc = await generateHhgCode(
       inputData.latitude,
-      inputData.longitude
+      inputData.longitude,
+      inputData.stateCode,
+      inputData.lgaCode
     );
 
-    if (!hhgCode) {
+    if (!ddc) {
       res.status(400).json({
         error:
           "Could not generate address code for the provided coordinates. Ensure location is within Nigeria.",
@@ -173,24 +178,40 @@ export const createAddress = async (req: Request, res: Response) => {
       return;
     }
 
-    // Parse stateCode and lgaCode from hhgCode (e.g., NG-LA-015-9FG4P8M)
-    const codeParts = hhgCode.split("-");
-    if (codeParts.length !== 4) {
-      console.error(`Failed to parse generated HHG code: ${hhgCode}`);
+    // Parse DDC components (format: NG-XX-YY-ZZZ-NNNN)
+    const ddcInfo = parseDDC(ddc);
+    if (!ddcInfo) {
+      console.error(`Failed to parse generated DDC: ${ddc}`);
       res
         .status(500)
         .json({ error: "Internal error generating address components." });
       return;
     }
-    const stateCode = codeParts[1];
-    const lgaCode = codeParts[2];
+    
+    const { stateCode, lgaCode, areaType, areaCode, locationNumber } = ddcInfo;
 
     // Prepare data for insertion using the correct schema fields
+    
+    // Handle missing or invalid street names
+    let streetName = inputData.street;
+    if (needsGeneratedStreetName(streetName)) {
+      // Generate a descriptive street name based on available information
+      streetName = generateLocationDescription({
+        latitude: inputData.latitude,
+        longitude: inputData.longitude,
+        cityName: inputData.city,
+        areaType: areaType,
+        areaCode: areaCode,
+        ddc: ddc,
+        nearbyLandmarks: inputData.landmark ? [inputData.landmark] : undefined
+      });
+    }
+    
     const newAddressData = {
       // Fields from input
       latitude: inputData.latitude.toString(),
       longitude: inputData.longitude.toString(),
-      street: inputData.street,
+      street: streetName,
       city: inputData.city,
       houseNumber: inputData.houseNumber,
       estate: inputData.estate,
@@ -203,9 +224,12 @@ export const createAddress = async (req: Request, res: Response) => {
       label: inputData.label,
       category: inputData.category,
       // Derived/Generated fields
-      hhgCode: hhgCode,
+      hhgCode: ddc, // Store the full DDC as the hhgCode
       stateCode: stateCode,
       lgaCode: lgaCode,
+      areaType: areaType,
+      areaCode: areaCode,
+      locationNumber: locationNumber,
     };
 
     const insertedResult = await db

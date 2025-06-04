@@ -4,7 +4,12 @@ import { users, addresses } from "../db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { generateHhgCode } from "../utils/addressing"; // Import HHG generator
+// z import will be used when implementing Zod validation
+import {
+  generateHhgCode,
+  parseDDC,
+  generateEnhancedAddress,
+} from "../utils/addressing"; // Import DDC generator and parser
 
 // TODO: Move OTP storage logic (e.g., to memory cache, Redis, or DB)
 const otpStore: { [key: string]: { otp: string; expiresAt: number } } = {};
@@ -127,13 +132,16 @@ export const register = async (req: Request, res: Response) => {
   } = req.body;
 
   // --- Basic Checks (Replace with Zod) ---
+  const noStreetAddress = req.body.noStreetAddress === "true";
+
   if (
     !phoneNumber ||
     !firstName ||
     !lastName ||
     !email ||
     !password ||
-    !street ||
+    // Street and house number validation relaxed if noStreetAddress is true
+    (!noStreetAddress && !street) ||
     // !state || // Removed
     // !lga || // Removed
     !city ||
@@ -186,47 +194,98 @@ export const register = async (req: Request, res: Response) => {
       const newUser = newUserResult[0];
       if (!newUser) throw new Error("Failed to create user record");
 
-      // --- Generate and parse HHG code for address ---
-      const hhgCode = await generateHhgCode(latitude, longitude);
-      if (!hhgCode) {
-        // If code generation fails (e.g., invalid coords), throw to rollback transaction
+      // --- Enhanced Address Generation (with rural support) ---
+      let enhancedAddressInfo;
+      let ddc: string | null = null;
+      let stateCode: string = "";
+      let lgaCode: string = "";
+      let areaType: string = "";
+      let areaCode: string = "";
+      let locationNumber: string = "";
+
+      try {
+        // Create user-provided description from available fields
+        let userDescription = "";
+        if (landmark) userDescription += landmark;
+        if (specialDescription) {
+          userDescription += (userDescription ? ", " : "") + specialDescription;
+        }
+
+        // Use enhanced address generation for rural areas
+        enhancedAddressInfo = await generateEnhancedAddress(
+          latitude,
+          longitude,
+          city,
+          userDescription || undefined,
+          noStreetAddress // Treat no street address as potentially rural
+        );
+
+        ddc = enhancedAddressInfo.hhgCode;
+
+        if (ddc) {
+          const ddcInfo = parseDDC(ddc);
+          if (ddcInfo) {
+            ({ stateCode, lgaCode, areaType, areaCode, locationNumber } =
+              ddcInfo);
+          }
+        }
+      } catch (error) {
+        console.warn(
+          "Enhanced address generation failed, falling back to basic DDC",
+          error
+        );
+
+        // Fallback to original DDC generation
+        let stateCodeForDDC: string | undefined;
+        if (city) {
+          const cityLower = city.toLowerCase();
+          if (cityLower.includes("lagos")) stateCodeForDDC = "LA";
+          else if (cityLower.includes("abuja")) stateCodeForDDC = "FC";
+          else if (cityLower.includes("kano")) stateCodeForDDC = "KN";
+          else if (cityLower.includes("ibadan") || cityLower.includes("oyo"))
+            stateCodeForDDC = "OY";
+        }
+
+        ddc = await generateHhgCode(latitude, longitude, stateCodeForDDC);
+        if (ddc) {
+          const ddcInfo = parseDDC(ddc);
+          if (ddcInfo) {
+            ({ stateCode, lgaCode, areaType, areaCode, locationNumber } =
+              ddcInfo);
+          }
+        }
+      }
+
+      if (!ddc) {
         throw new Error(
           "Could not generate address code for the provided coordinates."
         );
       }
-      const codeParts = hhgCode.split("-");
-      if (codeParts.length !== 4) {
-        throw new Error("Internal error parsing generated address components.");
-      }
-      const stateCode = codeParts[1];
-      const lgaCode = `${stateCode}${codeParts[2]}`; // e.g., LA + 015 = LA015
-      // --- End HHG code generation ---
+      // --- End Enhanced Address Generation ---
 
       // Create address (linked to user) using correct schema
       const newAddressResult = await tx
         .insert(addresses)
         .values({
           userId: newUser.id,
-          street,
-          // Remove: state, lga, uniqueCode
-          // state: state,
-          // lga: lga,
+          street: noStreetAddress ? "" : street, // Empty if no street address
           city,
-          houseNumber,
+          houseNumber: noStreetAddress ? "" : houseNumber, // Empty if no street address
           landmark,
           floor: apartment, // Map apartment to floor field
           estate,
           specialDescription,
           photoUrls,
-          latitude: latitude.toString(), // Convert to string for decimal
-          longitude: longitude.toString(),
-          // Add: hhgCode, stateCode, lgaCode
-          hhgCode: hhgCode,
-          stateCode: stateCode,
-          lgaCode: lgaCode,
-          // uniqueCode: "TBD", // Removed
-          isSaved: true, // Assume primary address is saved
-          label: "Primary", // Default label?
+          latitude,
+          longitude,
+          hhgCode: ddc, // Store the full DDC as the hhgCode
+          stateCode,
+          lgaCode,
+          areaType,
+          areaCode,
+          locationNumber,
+          isSaved: true, // Default address should be saved
+          label: "Home", // Default label?
         })
         .returning();
 

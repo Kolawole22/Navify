@@ -15,6 +15,20 @@
       "when": 1747771909894,
       "tag": "0001_smiling_jimmy_woo",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1748287369987,
+      "tag": "0002_milky_wraith",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1748342065964,
+      "tag": "0003_short_exiles",
+      "breakpoints": true
     }
   ]
 }

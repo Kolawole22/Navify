@@ -34,7 +34,7 @@ export const addresses = pgTable(
   {
     id: serial("id").primaryKey(),
     userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }), // Link to users table, cascade delete
-    hhgCode: text("hhg_code").unique().notNull(), // Unique Navify code for the address
+    hhgCode: text("hhg_code").unique().notNull(), // Digital Door Code (DDC) for the address
     latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(), // Sufficient precision for coordinates
     longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
     street: text("street"),
@@ -45,6 +45,10 @@ export const addresses = pgTable(
     lgaCode: text("lga_code").references(() => lgas.code, {
       onDelete: "restrict",
     }), // Link to lgas table
+    // New DDC component fields
+    areaType: text("area_type"), // STR, Z, or LMK
+    areaCode: text("area_code"), // Area identifier code
+    locationNumber: text("location_number"), // 4-digit unique location number
     houseNumber: text("house_number"),
     estate: text("estate"),
     floor: text("floor"), // Renamed from apartment
@@ -79,20 +83,6 @@ export const addresses = pgTable(
 // Define relations (many addresses can belong to one user)
 export const usersRelations = relations(users, ({ many }) => ({
   addresses: many(addresses),
-}));
-
-export const addressesRelations = relations(addresses, ({ one }) => ({
-  user: one(users, {
-    fields: [addresses.userId],
-    references: [users.id],
-  }),
-  // Add relation to state (optional but good practice)
-  state: one(states, {
-    fields: [addresses.stateCode],
-    references: [states.code],
-  }),
-  // Note: Direct relation to LGA is trickier due to composite key.
-  // You typically fetch LGAs based on the stateCode when needed.
 }));
 
 // TODO: Add LocationHistory table if needed separately
@@ -171,4 +161,40 @@ export const lgaRelations = relations(lgas, ({ one }) => ({
     fields: [lgas.stateCode],
     references: [states.code],
   }),
+}));
+
+// --- Address Categories Table ---
+export const addressCategories = pgTable(
+  "address_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    label: text("label").notNull(),
+    description: text("description"),
+    createdAt: timestamp("created_at").default(sql`now()`).notNull(),
+    updatedAt: timestamp("updated_at").default(sql`now()`).notNull(),
+  }
+);
+
+// Define all relations after all tables are defined
+export const addressCategoriesRelations = relations(addressCategories, ({ many }) => ({
+  addresses: many(addresses),
+}));
+
+export const addressesRelations = relations(addresses, ({ one }) => ({
+  user: one(users, {
+    fields: [addresses.userId],
+    references: [users.id],
+  }),
+  // Add relation to state (optional but good practice)
+  state: one(states, {
+    fields: [addresses.stateCode],
+    references: [states.code],
+  }),
+  // Add relation to category
+  category: one(addressCategories, {
+    fields: [addresses.category],
+    references: [addressCategories.id],
+  }),
+  // Note: Direct relation to LGA is trickier due to composite key.
+  // You typically fetch LGAs based on the stateCode when needed.
 }));

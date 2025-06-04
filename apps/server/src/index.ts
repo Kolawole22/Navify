@@ -9,6 +9,7 @@ import addressRoutes from "./routes/address.routes"; // Corrected filename
 import userRoutes from "./routes/user.routes";
 import authRoutes from "./routes/auth.routes"; // Import auth routes
 import locationRoutes from "./routes/location.routes"; // Import location routes
+import addressCategoriesRoutes from "./routes/address-categories.routes"; // Import address categories routes
 // import authRoutes from "./routes/authRoutes"; // Keep commented until created
 
 // Load environment variables
@@ -30,6 +31,7 @@ app.use("/api/addresses", addressRoutes); // Uncommented
 app.use("/api/users", userRoutes);
 app.use("/api/auth", authRoutes); // Mount auth routes
 app.use("/api/locations", locationRoutes); // Mount location routes
+app.use("/api/address/categories", addressCategoriesRoutes); // Mount address categories routes
 // app.use("/api/auth", authRoutes); // Keep commented
 
 // Health check endpoint

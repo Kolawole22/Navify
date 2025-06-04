@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "./schema.js";
-import { states, lgas } from "./schema.js";
+import { states, lgas, addressCategories } from "./schema.js";
 import * as fs from "fs";
 import path from "path";
 // import { fileURLToPath } from "url";
@@ -172,6 +172,52 @@ async function seedDatabase() {
     }
   } else {
     console.log("No new LGAs to insert.");
+  }
+
+  // --- Seed Address Categories ---
+  console.log("Seeding address categories...");
+  
+  // Check if categories already exist
+  const existingCategories = await db.select().from(addressCategories);
+  
+  if (existingCategories.length === 0) {
+    // Define the initial categories
+    const categories = [
+      {
+        label: "Home",
+        description: "Primary residence address"
+      },
+      {
+        label: "Work",
+        description: "Business or workplace address"
+      },
+      {
+        label: "Family",
+        description: "Address of a family member"
+      },
+      {
+        label: "Friend",
+        description: "Address of a friend"
+      },
+      {
+        label: "School",
+        description: "Educational institution address"
+      },
+      {
+        label: "Other",
+        description: "Other address type"
+      }
+    ];
+    
+    try {
+      // Insert categories
+      const result = await db.insert(addressCategories).values(categories).returning();
+      console.log(`Successfully seeded ${result.length} address categories.`);
+    } catch (error) {
+      console.error("Error seeding address categories:", error);
+    }
+  } else {
+    console.log(`Found ${existingCategories.length} existing address categories, skipping seed.`);
   }
 
   console.log("Seeding process finished.");
