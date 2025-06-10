@@ -4,12 +4,83 @@ import { users, addresses } from "../db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { z } from "zod"; // Add Zod import
 // z import will be used when implementing Zod validation
 import {
   generateHhgCode,
   parseDDC,
   generateEnhancedAddress,
 } from "../utils/addressing"; // Import DDC generator and parser
+
+// --- Zod Schemas ---
+
+// OTP request schema
+const otpRequestSchema = z.object({
+  phoneNumber: z.string().min(1, "Phone number is required"),
+});
+
+// OTP verification schema
+const otpVerifySchema = z.object({
+  phoneNumber: z.string().min(1, "Phone number is required"),
+  otp: z.string().min(1, "OTP is required"),
+});
+
+// Login schema
+const loginSchema = z.object({
+  email: z.string().email("Invalid email format"),
+  password: z.string().min(1, "Password is required"),
+});
+
+// Registration schema with conditional validation
+const registerSchema = z
+  .object({
+    phoneNumber: z.string().min(1, "Phone number is required"),
+    firstName: z.string().min(1, "First name is required"),
+    lastName: z.string().min(1, "Last name is required"),
+    email: z.string().email("Invalid email format"),
+    password: z.string().min(6, "Password must be at least 6 characters long"),
+
+    // Location fields
+    latitude: z
+      .number({
+        invalid_type_error: "Latitude must be a number",
+        required_error: "Latitude is required",
+      })
+      .min(-90)
+      .max(90, "Invalid latitude"),
+    longitude: z
+      .number({
+        invalid_type_error: "Longitude must be a number",
+        required_error: "Longitude is required",
+      })
+      .min(-180)
+      .max(180, "Invalid longitude"),
+    city: z.string().min(1, "City is required"),
+
+    // Address fields with conditional validation
+    street: z.string().optional().default(""),
+    houseNumber: z.string().optional().default(""),
+    landmark: z.string().optional(),
+    apartment: z.string().optional(),
+    estate: z.string().optional(),
+    specialDescription: z.string().optional(),
+    category: z.string().optional(),
+    photoUrls: z.array(z.string()).optional(),
+    noStreetAddress: z.boolean().optional().default(false),
+  })
+  .refine(
+    (data) => {
+      // If noStreetAddress is false, street is required
+      if (!data.noStreetAddress && !data.street) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: "Street is required when no street address is not specified",
+      path: ["street"],
+    }
+  );
 
 // TODO: Move OTP storage logic (e.g., to memory cache, Redis, or DB)
 const otpStore: { [key: string]: { otp: string; expiresAt: number } } = {};
@@ -40,13 +111,23 @@ const generateToken = (userId: string, email: string): string => {
 
 // POST /api/auth/request-otp
 export const requestOtp = async (req: Request, res: Response) => {
-  // TODO: Implement validation (e.g., Zod) for phoneNumber
-  const { phoneNumber } = req.body;
+  // Validate request body with Zod
+  const validationResult = otpRequestSchema.safeParse(req.body);
 
-  if (!phoneNumber) {
-    res.status(400).json({ error: "Phone number is required" });
+  if (!validationResult.success) {
+    const errors = validationResult.error.errors.map((err) => ({
+      field: err.path.join("."),
+      message: err.message,
+    }));
+
+    res.status(400).json({
+      error: errors[0]?.message || "Validation failed",
+      details: errors,
+    });
     return;
   }
+
+  const { phoneNumber } = validationResult.data;
 
   // Generate mock OTP
   const mockOtp = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
@@ -65,13 +146,23 @@ export const requestOtp = async (req: Request, res: Response) => {
 
 // POST /api/auth/verify-otp
 export const verifyOtp = async (req: Request, res: Response) => {
-  // TODO: Implement validation
-  const { phoneNumber, otp } = req.body;
+  // Validate request body with Zod
+  const validationResult = otpVerifySchema.safeParse(req.body);
 
-  if (!phoneNumber || !otp) {
-    res.status(400).json({ error: "Phone number and OTP are required" });
+  if (!validationResult.success) {
+    const errors = validationResult.error.errors.map((err) => ({
+      field: err.path.join("."),
+      message: err.message,
+    }));
+
+    res.status(400).json({
+      error: errors[0]?.message || "Validation failed",
+      details: errors,
+    });
     return;
   }
+
+  const { phoneNumber, otp } = validationResult.data;
 
   const storedOtpData = otpStore[phoneNumber];
 
@@ -107,51 +198,49 @@ export const register = async (req: Request, res: Response) => {
   console.log(req.body);
   console.log("---------------------------------");
 
-  // TODO: Implement Zod validation for the entire registration payload
-  // const validationResult = registerSchema.safeParse(req.body);
-  // if (!validationResult.success) { ... }
+  // Validate request body with Zod
+  const validationResult = registerSchema.safeParse(req.body);
 
+  if (!validationResult.success) {
+    const errors = validationResult.error.errors.map((err) => ({
+      field: err.path.join("."),
+      message: err.message,
+    }));
+
+    console.log("Validation errors:", errors);
+
+    // Return first error message for simplicity (or return all errors)
+    res.status(400).json({
+      error: errors[0]?.message || "Validation failed",
+      details: errors,
+    });
+    return;
+  }
+
+  // Extract validated data
   const {
     phoneNumber,
     firstName,
     lastName,
     email,
     password,
-    // Address fields - expect lat/lon, use them to generate code/state/lga
     latitude,
     longitude,
     street,
     city,
     houseNumber,
     landmark,
-    apartment, // Maps to floor
+    apartment,
     estate,
     specialDescription,
     photoUrls,
-    // Remove state, lga from destructuring as they are derived
-  } = req.body;
+    noStreetAddress,
+    category,
+  } = validationResult.data;
 
-  // --- Basic Checks (Replace with Zod) ---
-  const noStreetAddress = req.body.noStreetAddress === "true";
-
-  if (
-    !phoneNumber ||
-    !firstName ||
-    !lastName ||
-    !email ||
-    !password ||
-    // Street and house number validation relaxed if noStreetAddress is true
-    (!noStreetAddress && !street) ||
-    // !state || // Removed
-    // !lga || // Removed
-    !city ||
-    !latitude ||
-    !longitude
-  ) {
-    res.status(400).json({ error: "Missing required registration fields" });
-    return;
-  }
-  // TODO: Add password complexity checks
+  // Also extract the client-provided location codes
+  const clientStateCode = req.body.stateCode;
+  const clientLgaCode = req.body.lgaCode;
 
   try {
     // Check if user already exists (by email or phone)
@@ -268,7 +357,9 @@ export const register = async (req: Request, res: Response) => {
         .insert(addresses)
         .values({
           userId: newUser.id,
-          street: noStreetAddress ? "" : street, // Empty if no street address
+          street: noStreetAddress
+            ? enhancedAddressInfo?.addressComponents?.primary || "" // Use generated street for rural areas
+            : street, // Use provided street for urban areas
           city,
           houseNumber: noStreetAddress ? "" : houseNumber, // Empty if no street address
           landmark,
@@ -279,14 +370,15 @@ export const register = async (req: Request, res: Response) => {
           latitude,
           longitude,
           hhgCode: ddc, // Store the full DDC as the hhgCode
-          stateCode,
-          lgaCode,
+          stateCode: clientStateCode || stateCode, // Use client-provided first
+          lgaCode: clientLgaCode || lgaCode, // Use client-provided first
           areaType,
           areaCode,
           locationNumber,
           isSaved: true, // Default address should be saved
           label: "Home", // Default label?
-        })
+          category: category,
+        } as any)
         .returning();
 
       if (newAddressResult.length === 0)
@@ -330,13 +422,23 @@ export const register = async (req: Request, res: Response) => {
 
 // POST /api/auth/login
 export const login = async (req: Request, res: Response) => {
-  // TODO: Implement Zod validation
-  const { email, password } = req.body;
+  // Validate request body with Zod
+  const validationResult = loginSchema.safeParse(req.body);
 
-  if (!email || !password) {
-    res.status(400).json({ error: "Email and password are required" });
+  if (!validationResult.success) {
+    const errors = validationResult.error.errors.map((err) => ({
+      field: err.path.join("."),
+      message: err.message,
+    }));
+
+    res.status(400).json({
+      error: errors[0]?.message || "Validation failed",
+      details: errors,
+    });
     return;
   }
+
+  const { email, password } = validationResult.data;
 
   try {
     // Find user by email
