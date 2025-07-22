@@ -183,34 +183,31 @@ async function determineAreaIdentifier(
 
 // --- Generate sequential location number ---
 /**
- * Returns a unique 4-digit location number for the area.
- * In a real implementation, this would query the database to find
- * the next available number for the specific area.
+ * Returns a deterministic 4-digit location number based on a grid system.
+ * This approach uses the fractional parts of the coordinates to create a
+ * predictable and spatially relevant identifier.
  */
-async function getNextLocationNumber(
-  _stateCode: string,
-  _lgaCode: string,
-  _areaType: AreaType,
-  _areaCode: string
-): Promise<string> {
+function getNextLocationNumber(latitude: number, longitude: number): string {
   try {
-    // Since the database schema might not be fully migrated yet,
-    // we'll use a simple approach to generate a unique number
+    // This implementation uses a grid-based system based on coordinates
+    // to make the location number deterministic and spatially relevant.
+    // It divides each degree-square into a 100x100 grid.
 
-    // Use the current timestamp and some randomness to generate a unique number
-    // This ensures uniqueness even if multiple addresses are created at the same time
-    const timestamp = Date.now();
-    const randomPart = Math.floor(Math.random() * 1000);
+    // Get the first two digits of the fractional part of latitude (00-99)
+    const latPart = Math.floor((latitude % 1) * 100);
 
-    // Combine timestamp and random number to create a unique value
-    // Then take the last 4 digits to keep it within our format
-    const combined = `${timestamp}${randomPart}`;
-    const lastFourDigits = combined.slice(-4);
+    // Get the first two digits of the fractional part of longitude (00-99)
+    const lonPart = Math.floor((longitude % 1) * 100);
 
-    return lastFourDigits.padStart(4, "0");
+    // Combine them to form a 4-digit number (e.g., lat 52, lon 37 -> 5237)
+    const locationNumber = `${latPart.toString().padStart(2, "0")}${lonPart
+      .toString()
+      .padStart(2, "0")}`;
+
+    return locationNumber;
   } catch (error) {
-    console.error("Error generating next location number:", error);
-    // Fallback to a simple random number
+    console.error("Error generating location number from grid:", error);
+    // Fallback to a random number in case of unexpected errors
     const randomNum = Math.floor(Math.random() * 9000) + 1000; // 1000-9999
     return randomNum.toString();
   }
@@ -295,16 +292,13 @@ export async function generateHhgCode(
     formattedAreaCode = `${type}${code.padStart(3, "0")}`;
   }
 
-  // 3. Generate the next unique location number for this area
-  const locationNumber = await getNextLocationNumber(
-    resolvedStateCode,
-    paddedLgaCode,
-    type,
-    code
-  );
+  // Pass the actual coordinates to the location number generator
+  const locationNumber = getNextLocationNumber(latitude, longitude);
 
-  // 4. Build the final DDC
-  return `NG-${resolvedStateCode.toUpperCase()}-${paddedLgaCode}-${formattedAreaCode}-${locationNumber}`;
+  // Assemble the DDC
+  const ddc = `NG-${resolvedStateCode.toUpperCase()}-${paddedLgaCode}-${formattedAreaCode}-${locationNumber}`;
+
+  return ddc;
 }
 
 /**

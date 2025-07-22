@@ -13,6 +13,7 @@ import {
   uniqueIndex,
   index,
   jsonb,
+  integer,
 } from "drizzle-orm/pg-core";
 
 // Users Table
@@ -23,6 +24,7 @@ export const users = pgTable("users", {
   firstName: varchar("first_name", { length: 255 }).notNull(),
   lastName: varchar("last_name", { length: 255 }).notNull(),
   passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+  preferences: jsonb("preferences").$type<Record<string, any>>().default({}), // User settings/preferences
   // Add other user fields as needed, e.g., name, passwordHash, preferences
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -164,21 +166,25 @@ export const lgaRelations = relations(lgas, ({ one }) => ({
 }));
 
 // --- Address Categories Table ---
-export const addressCategories = pgTable(
-  "address_categories",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    label: text("label").notNull(),
-    description: text("description"),
-    createdAt: timestamp("created_at").default(sql`now()`).notNull(),
-    updatedAt: timestamp("updated_at").default(sql`now()`).notNull(),
-  }
-);
+export const addressCategories = pgTable("address_categories", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  label: text("label").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at")
+    .default(sql`now()`)
+    .notNull(),
+  updatedAt: timestamp("updated_at")
+    .default(sql`now()`)
+    .notNull(),
+});
 
 // Define all relations after all tables are defined
-export const addressCategoriesRelations = relations(addressCategories, ({ many }) => ({
-  addresses: many(addresses),
-}));
+export const addressCategoriesRelations = relations(
+  addressCategories,
+  ({ many }) => ({
+    addresses: many(addresses),
+  })
+);
 
 export const addressesRelations = relations(addresses, ({ one }) => ({
   user: one(users, {
@@ -197,4 +203,199 @@ export const addressesRelations = relations(addresses, ({ one }) => ({
   }),
   // Note: Direct relation to LGA is trickier due to composite key.
   // You typically fetch LGAs based on the stateCode when needed.
+}));
+
+export const addressBookmarks = pgTable("address_bookmarks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  addressId: serial("address_id")
+    .notNull()
+    .references(() => addresses.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Location History Table
+export const locationHistory = pgTable("location_history", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  addressId: serial("address_id").references(() => addresses.id, {
+    onDelete: "set null",
+  }),
+  latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(),
+  longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
+  activity: text("activity"), // 'search', 'navigation', 'visit'
+  visitedAt: timestamp("visited_at").defaultNow().notNull(),
+  metadata: jsonb("metadata").$type<Record<string, any>>(), // Additional data like transport mode, duration, etc.
+});
+
+// User Sessions Table (for password reset, etc.)
+export const userSessions = pgTable("user_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  type: text("type").notNull(), // 'password_reset', 'email_verification', 'phone_verification'
+  expiresAt: timestamp("expires_at").notNull(),
+  used: boolean("used").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Notifications Table
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  type: text("type").notNull(), // 'system', 'address_shared', 'navigation'
+  read: boolean("read").default(false),
+  data: jsonb("data").$type<Record<string, any>>(), // Additional notification data
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Address Sharing Table
+export const addressShares = pgTable("address_shares", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  addressId: serial("address_id")
+    .notNull()
+    .references(() => addresses.id, { onDelete: "cascade" }),
+  sharedBy: uuid("shared_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  sharedWith: uuid("shared_with").references(() => users.id, {
+    onDelete: "cascade",
+  }),
+  shareCode: text("share_code").unique().notNull(), // For QR codes and links
+  expiresAt: timestamp("expires_at"),
+  viewed: boolean("viewed").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Offline Maps Table
+export const offlineMaps = pgTable("offline_maps", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  region: jsonb("region")
+    .$type<{
+      latitude: number;
+      longitude: number;
+      latitudeDelta: number;
+      longitudeDelta: number;
+    }>()
+    .notNull(),
+  size: integer("size"), // Size in bytes
+  downloadedAt: timestamp("downloaded_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at"), // When the map data expires
+});
+
+// Address Ratings Table
+export const addressRatings = pgTable("address_ratings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  addressId: serial("address_id")
+    .notNull()
+    .references(() => addresses.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  rating: integer("rating").notNull(), // 1-5 stars
+  review: text("review"),
+  helpful: integer("helpful").default(0), // Number of helpful votes
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Search History Table
+export const searchHistory = pgTable("search_history", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  query: text("query").notNull(),
+  results: integer("results").default(0), // Number of results found
+  selectedResult: serial("selected_result").references(() => addresses.id, {
+    onDelete: "set null",
+  }),
+  searchAt: timestamp("search_at").defaultNow().notNull(),
+});
+
+// Define additional relations
+export const locationHistoryRelations = relations(
+  locationHistory,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [locationHistory.userId],
+      references: [users.id],
+    }),
+    address: one(addresses, {
+      fields: [locationHistory.addressId],
+      references: [addresses.id],
+    }),
+  })
+);
+
+export const userSessionsRelations = relations(userSessions, ({ one }) => ({
+  user: one(users, {
+    fields: [userSessions.userId],
+    references: [users.id],
+  }),
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+}));
+
+export const addressSharesRelations = relations(addressShares, ({ one }) => ({
+  address: one(addresses, {
+    fields: [addressShares.addressId],
+    references: [addresses.id],
+  }),
+  sharedBy: one(users, {
+    fields: [addressShares.sharedBy],
+    references: [users.id],
+  }),
+  sharedWith: one(users, {
+    fields: [addressShares.sharedWith],
+    references: [users.id],
+  }),
+}));
+
+export const offlineMapsRelations = relations(offlineMaps, ({ one }) => ({
+  user: one(users, {
+    fields: [offlineMaps.userId],
+    references: [users.id],
+  }),
+}));
+
+export const addressRatingsRelations = relations(addressRatings, ({ one }) => ({
+  address: one(addresses, {
+    fields: [addressRatings.addressId],
+    references: [addresses.id],
+  }),
+  user: one(users, {
+    fields: [addressRatings.userId],
+    references: [users.id],
+  }),
+}));
+
+export const searchHistoryRelations = relations(searchHistory, ({ one }) => ({
+  user: one(users, {
+    fields: [searchHistory.userId],
+    references: [users.id],
+  }),
+  selectedResult: one(addresses, {
+    fields: [searchHistory.selectedResult],
+    references: [addresses.id],
+  }),
 }));

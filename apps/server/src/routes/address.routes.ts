@@ -6,6 +6,9 @@ import {
   updateAddress,
   deleteAddress,
   searchAddresses,
+  bookmarkAddress,
+  unbookmarkAddress,
+  getBookmarkedAddresses,
 } from "../controllers/address.controller"; // Correct import path
 import wrapAsync from "../utils/wrapAsync"; // Import the wrapper
 import { protect } from "../middleware/auth.middleware"; // Import the actual JWT middleware
@@ -27,6 +30,14 @@ router.post("/", wrapAsync(createAddress));
 router.patch("/:id", wrapAsync(updateAddress)); // Changed PUT to PATCH for partial updates
 // router.put("/:id", wrapAsync(updateAddress)); // Kept PUT in case full update is needed later
 router.delete("/:id", wrapAsync(deleteAddress));
+
+// Bookmark endpoints
+router.post("/:id/bookmark", protect, wrapAsync(bookmarkAddress));
+router.delete("/:id/bookmark", protect, wrapAsync(unbookmarkAddress));
+// Bookmarks list for current user
+const userRouter = express.Router();
+userRouter.get("/me/bookmarks", protect, wrapAsync(getBookmarkedAddresses));
+export { userRouter };
 
 // POST /api/addresses/rural-suggestions
 const getRuralSuggestions = async (req: Request, res: Response) => {

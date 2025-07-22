@@ -10,6 +10,9 @@ import userRoutes from "./routes/user.routes";
 import authRoutes from "./routes/auth.routes"; // Import auth routes
 import locationRoutes from "./routes/location.routes"; // Import location routes
 import addressCategoriesRoutes from "./routes/address-categories.routes"; // Import address categories routes
+import locationHistoryRoutes from "./routes/location-history.routes"; // Import location history routes
+import notificationsRoutes from "./routes/notifications.routes"; // Import notifications routes
+import addressSharingRoutes from "./routes/address-sharing.routes"; // Import address sharing routes
 // import authRoutes from "./routes/authRoutes"; // Keep commented until created
 
 // Load environment variables
@@ -32,6 +35,9 @@ app.use("/api/users", userRoutes);
 app.use("/api/auth", authRoutes); // Mount auth routes
 app.use("/api/locations", locationRoutes); // Mount location routes
 app.use("/api/address/categories", addressCategoriesRoutes); // Mount address categories routes
+app.use("/api/location-history", locationHistoryRoutes); // Mount location history routes
+app.use("/api/notifications", notificationsRoutes); // Mount notifications routes
+app.use("/api/address-sharing", addressSharingRoutes); // Mount address sharing routes
 // app.use("/api/auth", authRoutes); // Keep commented
 
 // Health check endpoint

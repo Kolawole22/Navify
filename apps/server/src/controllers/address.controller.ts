@@ -1,10 +1,13 @@
 import { Request, Response } from "express";
 import { db } from "../db"; // Import Drizzle db instance
-import { addresses } from "../db/schema"; // Import Drizzle schemas
-import { eq, and, or, ilike, SQL } from "drizzle-orm"; // Import operators and SQL type
+import { addresses, addressBookmarks } from "../db/schema"; // Import Drizzle schemas
+import { eq, and, or, ilike, SQL, sql } from "drizzle-orm"; // Import operators and SQL type
 import { z } from "zod";
 import { generateHhgCode, parseDDC } from "../utils/addressing"; // Import the DDC code generator and utilities
-import { generateLocationDescription, needsGeneratedStreetName } from "../utils/location-description"; // Import location description utilities
+import {
+  generateLocationDescription,
+  needsGeneratedStreetName,
+} from "../utils/location-description"; // Import location description utilities
 
 // Validation Schema for Address Creation/Update
 // Aligned with Drizzle schema and project scope
@@ -106,6 +109,7 @@ export const getAddress = async (
     addressResult = await db
       .select()
       .from(addresses)
+
       .where(queryCondition)
       .limit(1);
 
@@ -187,11 +191,11 @@ export const createAddress = async (req: Request, res: Response) => {
         .json({ error: "Internal error generating address components." });
       return;
     }
-    
+
     const { stateCode, lgaCode, areaType, areaCode, locationNumber } = ddcInfo;
 
     // Prepare data for insertion using the correct schema fields
-    
+
     // Handle missing or invalid street names
     let streetName = inputData.street;
     if (needsGeneratedStreetName(streetName)) {
@@ -203,10 +207,10 @@ export const createAddress = async (req: Request, res: Response) => {
         areaType: areaType,
         areaCode: areaCode,
         ddc: ddc,
-        nearbyLandmarks: inputData.landmark ? [inputData.landmark] : undefined
+        nearbyLandmarks: inputData.landmark ? [inputData.landmark] : undefined,
       });
     }
-    
+
     const newAddressData = {
       // Fields from input
       latitude: inputData.latitude.toString(),
@@ -377,34 +381,217 @@ export const searchAddresses = async (req: Request, res: Response) => {
   }
 
   const searchTerm = `%${query.trim()}%`; // Prepare for LIKE/ILIKE
-  const limit = 10; // Limit results
+  const limit = 5; // Limit results
 
   try {
     // @ts-ignore - Assuming req.user might exist for personalized search later
-    // const userId = req.user?.id as string | undefined;
+    const userId = req.user?.id as string | undefined;
 
-    const searchResults = await db
-      .select() // Select all columns for now
-      .from(addresses)
-      .where(
-        or(
-          ilike(addresses.street, searchTerm),
-          ilike(addresses.city, searchTerm),
-          ilike(addresses.landmark, searchTerm),
-          ilike(addresses.estate, searchTerm),
-          ilike(addresses.specialDescription, searchTerm),
-          ilike(addresses.hhgCode, searchTerm)
-          // Add other relevant fields like LGA name? (Requires join)
+    if (userId) {
+      // If user is authenticated, include bookmark information
+      const searchResults = await db
+        .select({
+          id: addresses.id,
+          hhgCode: addresses.hhgCode,
+          street: addresses.street,
+          city: addresses.city,
+          stateCode: addresses.stateCode,
+          lgaCode: addresses.lgaCode,
+          latitude: addresses.latitude,
+          longitude: addresses.longitude,
+          houseNumber: addresses.houseNumber,
+          estate: addresses.estate,
+          floor: addresses.floor,
+          landmark: addresses.landmark,
+          specialDescription: addresses.specialDescription,
+          category: addresses.category,
+          photoUrls: addresses.photoUrls,
+          isSaved: addresses.isSaved,
+          label: addresses.label,
+          userId: addresses.userId,
+          createdAt: addresses.createdAt,
+          updatedAt: addresses.updatedAt,
+          areaType: addresses.areaType,
+          areaCode: addresses.areaCode,
+          locationNumber: addresses.locationNumber,
+          bookmarkId: addressBookmarks.id, // Will be null if not bookmarked
+        })
+        .from(addresses)
+        .leftJoin(
+          addressBookmarks,
+          and(
+            eq(addressBookmarks.addressId, addresses.id),
+            eq(addressBookmarks.userId, userId)
+          )
         )
-        // Optionally, filter by userId if personalization is needed:
-        // and(eq(addresses.userId, userId))
-      )
-      .limit(limit)
-      .orderBy(addresses.city, addresses.street); // Basic ordering
+        .where(
+          or(
+            ilike(addresses.street, searchTerm),
+            ilike(addresses.city, searchTerm),
+            ilike(addresses.landmark, searchTerm),
+            ilike(addresses.estate, searchTerm),
+            ilike(addresses.specialDescription, searchTerm),
+            ilike(addresses.hhgCode, searchTerm)
+          )
+        )
+        .limit(limit)
+        .orderBy(addresses.city, addresses.street);
 
-    res.json(searchResults);
+      // Process results to add isBookmarked field
+      const processedResults = searchResults.map((result) => ({
+        ...result,
+        isBookmarked: !!result.bookmarkId,
+        bookmarkId: undefined, // Remove the bookmarkId from final result
+      }));
+
+      res.json(processedResults);
+    } else {
+      // If no user, just return addresses without bookmark info
+      const searchResults = await db
+        .select({
+          id: addresses.id,
+          hhgCode: addresses.hhgCode,
+          street: addresses.street,
+          city: addresses.city,
+          stateCode: addresses.stateCode,
+          lgaCode: addresses.lgaCode,
+          latitude: addresses.latitude,
+          longitude: addresses.longitude,
+          houseNumber: addresses.houseNumber,
+          estate: addresses.estate,
+          floor: addresses.floor,
+          landmark: addresses.landmark,
+          specialDescription: addresses.specialDescription,
+          category: addresses.category,
+          photoUrls: addresses.photoUrls,
+          isSaved: addresses.isSaved,
+          label: addresses.label,
+          userId: addresses.userId,
+          createdAt: addresses.createdAt,
+          updatedAt: addresses.updatedAt,
+          areaType: addresses.areaType,
+          areaCode: addresses.areaCode,
+          locationNumber: addresses.locationNumber,
+        })
+        .from(addresses)
+        .where(
+          or(
+            ilike(addresses.street, searchTerm),
+            ilike(addresses.city, searchTerm),
+            ilike(addresses.landmark, searchTerm),
+            ilike(addresses.estate, searchTerm),
+            ilike(addresses.specialDescription, searchTerm),
+            ilike(addresses.hhgCode, searchTerm)
+          )
+        )
+        .limit(limit)
+        .orderBy(addresses.city, addresses.street);
+
+      // Add isBookmarked as false for unauthenticated users
+      const processedResults = searchResults.map((result) => ({
+        ...result,
+        isBookmarked: false,
+      }));
+
+      res.json(processedResults);
+    }
   } catch (error: any) {
     console.error("Error searching addresses:", error);
     res.status(500).json({ error: "Failed to search addresses" });
+  }
+};
+
+// --- Address Bookmarks ---
+export const bookmarkAddress = async (
+  req: Request<{ id: string }>,
+  res: Response
+) => {
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const addressId = Number(req.params.id);
+  if (!addressId) {
+    res.status(400).json({ error: "Invalid address id" });
+    return;
+  }
+  try {
+    // Check if already bookmarked
+    const existing = await db
+      .select()
+      .from(addressBookmarks)
+      .where(
+        and(
+          eq(addressBookmarks.userId, req.user.id),
+          eq(addressBookmarks.addressId, addressId)
+        )
+      );
+    if (existing.length > 0) {
+      res.status(409).json({ error: "Address already bookmarked" });
+      return;
+    }
+    await db
+      .insert(addressBookmarks)
+      .values({ userId: req.user.id, addressId });
+    res.status(201).json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to bookmark address" });
+  }
+};
+
+export const unbookmarkAddress = async (
+  req: Request<{ id: string }>,
+  res: Response
+) => {
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const addressId = Number(req.params.id);
+  if (!addressId) {
+    res.status(400).json({ error: "Invalid address id" });
+    return;
+  }
+  try {
+    await db
+      .delete(addressBookmarks)
+      .where(
+        and(
+          eq(addressBookmarks.userId, req.user.id),
+          eq(addressBookmarks.addressId, addressId)
+        )
+      );
+    res.status(204).send();
+  } catch (error) {
+    res.status(500).json({ error: "Failed to remove bookmark" });
+  }
+};
+
+export const getBookmarkedAddresses = async (req: Request, res: Response) => {
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  try {
+    // Join bookmarks and addresses
+    const bookmarks = await db
+      .select({
+        id: addresses.id,
+        hhgCode: addresses.hhgCode,
+        street: addresses.street,
+        city: addresses.city,
+        stateCode: addresses.stateCode,
+        lgaCode: addresses.lgaCode,
+        latitude: addresses.latitude,
+        longitude: addresses.longitude,
+        label: addresses.label,
+        createdAt: addresses.createdAt,
+      })
+      .from(addressBookmarks)
+      .innerJoin(addresses, eq(addressBookmarks.addressId, addresses.id))
+      .where(eq(addressBookmarks.userId, req.user.id));
+    res.json({ bookmarks });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch bookmarks" });
   }
 };

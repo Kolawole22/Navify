@@ -4,7 +4,11 @@ import { Request, Response } from "express";
 // import { Prisma } from "@prisma/client";
 import { db } from "../db"; // Import Drizzle db instance
 import { users } from "../db/schema"; // Import users table schema
-import { eq } from "drizzle-orm"; // Import eq operator for WHERE clauses
+import { eq, desc, and } from "drizzle-orm"; // Import eq operator for WHERE clauses
+import { z } from "zod";
+import { addresses } from "../db/schema"; // Import addresses table schema
+import { locationHistory } from "../db/schema"; // Import location history table schema
+import { notifications } from "../db/schema"; // Import notifications table schema
 
 // Remove Prisma error type guard if no longer needed, or adapt if Drizzle has specific error types
 // function isPrismaKnownError(error: unknown): error is { code: string } {
@@ -163,5 +167,228 @@ export const deleteUser = async (
     console.error("Error deleting user:", error);
     // TODO: Add specific Drizzle error handling
     res.status(500).json({ error: "Failed to delete user" });
+  }
+};
+
+// PATCH /users/me - Update current user's profile
+export const updateCurrentUser = async (req: Request, res: Response) => {
+  // req.user is set by the protect middleware
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  // Zod schema for profile update
+  const profileSchema = z.object({
+    firstName: z.string().min(1).optional(),
+    lastName: z.string().min(1).optional(),
+    email: z.string().email().optional(),
+    phoneNumber: z.string().min(1).optional(),
+  });
+
+  const validation = profileSchema.safeParse(req.body);
+  if (!validation.success) {
+    res
+      .status(400)
+      .json({ error: validation.error.errors[0]?.message || "Invalid input" });
+    return;
+  }
+
+  const updateData: Partial<typeof users.$inferInsert> = { ...validation.data };
+  updateData.updatedAt = new Date();
+
+  try {
+    const updatedResult = await db
+      .update(users)
+      .set(updateData)
+      .where(eq(users.id, req.user.id))
+      .returning({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        phoneNumber: users.phoneNumber,
+        updatedAt: users.updatedAt,
+      });
+    const updatedUser = updatedResult[0];
+    if (!updatedUser) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    res.json(updatedUser);
+  } catch (error) {
+    // TODO: Add specific Drizzle error handling (e.g., for unique constraints)
+    res.status(500).json({ error: "Failed to update user profile" });
+  }
+};
+
+// Get comprehensive current user profile with location details
+export const getCurrentUserProfile = async (req: Request, res: Response) => {
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  try {
+    // Get user basic info
+    const userResult = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        phoneNumber: users.phoneNumber,
+        preferences: users.preferences,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      })
+      .from(users)
+      .where(eq(users.id, req.user.id))
+      .limit(1);
+
+    const user = userResult[0];
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    // Get user's addresses
+    const userAddresses = await db
+      .select({
+        id: addresses.id,
+        hhgCode: addresses.hhgCode,
+        latitude: addresses.latitude,
+        longitude: addresses.longitude,
+        street: addresses.street,
+        city: addresses.city,
+        stateCode: addresses.stateCode,
+        lgaCode: addresses.lgaCode,
+        areaType: addresses.areaType,
+        areaCode: addresses.areaCode,
+        locationNumber: addresses.locationNumber,
+        houseNumber: addresses.houseNumber,
+        estate: addresses.estate,
+        floor: addresses.floor,
+        landmark: addresses.landmark,
+        specialDescription: addresses.specialDescription,
+        category: addresses.category,
+        isSaved: addresses.isSaved,
+        label: addresses.label,
+        createdAt: addresses.createdAt,
+      })
+      .from(addresses)
+      .where(eq(addresses.userId, req.user.id))
+      .orderBy(desc(addresses.createdAt))
+      .limit(10); // Limit to recent 10 addresses
+
+    // Get recent location history
+    const recentLocations = await db
+      .select({
+        id: locationHistory.id,
+        latitude: locationHistory.latitude,
+        longitude: locationHistory.longitude,
+        activity: locationHistory.activity,
+        visitedAt: locationHistory.visitedAt,
+        metadata: locationHistory.metadata,
+      })
+      .from(locationHistory)
+      .where(eq(locationHistory.userId, req.user.id))
+      .orderBy(desc(locationHistory.visitedAt))
+      .limit(5); // Limit to recent 5 locations
+
+    // Get unread notifications count
+    const unreadNotifications = await db
+      .select({ count: notifications.id })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, req.user.id),
+          eq(notifications.read, false)
+        )
+      );
+
+    // Calculate some basic stats
+    const totalAddresses = userAddresses.length;
+    const totalLocations = await db
+      .select({ count: locationHistory.id })
+      .from(locationHistory)
+      .where(eq(locationHistory.userId, req.user.id));
+
+    const profile = {
+      user: {
+        ...user,
+        fullName: `${user.firstName} ${user.lastName}`.trim(),
+      },
+      stats: {
+        totalAddresses,
+        totalLocations: totalLocations.length,
+        unreadNotifications: unreadNotifications.length,
+      },
+      recentAddresses: userAddresses,
+      recentLocations,
+    };
+
+    res.json(profile);
+  } catch (error) {
+    console.error("Error fetching user profile:", error);
+    res.status(500).json({ error: "Failed to fetch user profile" });
+  }
+};
+
+// --- User Preferences Controllers ---
+
+export const getPreferences = async (req: Request, res: Response) => {
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  try {
+    const userResult = await db
+      .select({ preferences: users.preferences })
+      .from(users)
+      .where(eq(users.id, req.user.id))
+      .limit(1);
+    const preferences = userResult[0]?.preferences || {};
+    res.json({ preferences });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch preferences" });
+  }
+};
+
+const preferencesSchema = z.object({
+  darkMode: z.boolean().optional(),
+  notifications: z.boolean().optional(),
+  language: z.string().optional(),
+  units: z.string().optional(),
+});
+
+export const updatePreferences = async (req: Request, res: Response) => {
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const validation = preferencesSchema.safeParse(req.body);
+  if (!validation.success) {
+    res
+      .status(400)
+      .json({ error: validation.error.errors[0]?.message || "Invalid input" });
+    return;
+  }
+  try {
+    // Merge new preferences with existing
+    const userResult = await db
+      .select({ preferences: users.preferences })
+      .from(users)
+      .where(eq(users.id, req.user.id))
+      .limit(1);
+    const current = userResult[0]?.preferences || {};
+    const updated = { ...current, ...validation.data };
+    await db
+      .update(users)
+      .set({ preferences: updated })
+      .where(eq(users.id, req.user.id));
+    res.json({ preferences: updated });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to update preferences" });
   }
 };
