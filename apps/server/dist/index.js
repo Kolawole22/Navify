@@ -13,6 +13,10 @@ const address_routes_1 = __importDefault(require("./routes/address.routes")); //
 const user_routes_1 = __importDefault(require("./routes/user.routes"));
 const auth_routes_1 = __importDefault(require("./routes/auth.routes")); // Import auth routes
 const location_routes_1 = __importDefault(require("./routes/location.routes")); // Import location routes
+const address_categories_routes_1 = __importDefault(require("./routes/address-categories.routes")); // Import address categories routes
+const location_history_routes_1 = __importDefault(require("./routes/location-history.routes")); // Import location history routes
+const notifications_routes_1 = __importDefault(require("./routes/notifications.routes")); // Import notifications routes
+const address_sharing_routes_1 = __importDefault(require("./routes/address-sharing.routes")); // Import address sharing routes
 // import authRoutes from "./routes/authRoutes"; // Keep commented until created
 // Load environment variables
 dotenv_1.default.config();
@@ -30,6 +34,10 @@ app.use("/api/addresses", address_routes_1.default); // Uncommented
 app.use("/api/users", user_routes_1.default);
 app.use("/api/auth", auth_routes_1.default); // Mount auth routes
 app.use("/api/locations", location_routes_1.default); // Mount location routes
+app.use("/api/address/categories", address_categories_routes_1.default); // Mount address categories routes
+app.use("/api/location-history", location_history_routes_1.default); // Mount location history routes
+app.use("/api/notifications", notifications_routes_1.default); // Mount notifications routes
+app.use("/api/address-sharing", address_sharing_routes_1.default); // Mount address sharing routes
 // app.use("/api/auth", authRoutes); // Keep commented
 // Health check endpoint
 app.get("/health", (_req, res) => {

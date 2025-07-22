@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../db"; // Import Drizzle db instance
 import { addresses, addressBookmarks } from "../db/schema"; // Import Drizzle schemas
-import { eq, and, or, ilike, SQL, sql } from "drizzle-orm"; // Import operators and SQL type
+import { eq, and, or, ilike, SQL } from "drizzle-orm"; // Import operators and SQL type
 import { z } from "zod";
 import { generateHhgCode, parseDDC } from "../utils/addressing"; // Import the DDC code generator and utilities
 import {

@@ -9,7 +9,69 @@ const schema_1 = require("../db/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const addressing_1 = require("../utils/addressing"); // Import HHG generator
+const zod_1 = require("zod"); // Add Zod import
+// z import will be used when implementing Zod validation
+const addressing_1 = require("../utils/addressing"); // Import DDC generator and parser
+// --- Zod Schemas ---
+// OTP request schema
+const otpRequestSchema = zod_1.z.object({
+    phoneNumber: zod_1.z.string().min(1, "Phone number is required"),
+});
+// OTP verification schema
+const otpVerifySchema = zod_1.z.object({
+    phoneNumber: zod_1.z.string().min(1, "Phone number is required"),
+    otp: zod_1.z.string().min(1, "OTP is required"),
+});
+// Login schema
+const loginSchema = zod_1.z.object({
+    email: zod_1.z.string().email("Invalid email format"),
+    password: zod_1.z.string().min(1, "Password is required"),
+});
+// Registration schema with conditional validation
+const registerSchema = zod_1.z
+    .object({
+    phoneNumber: zod_1.z.string().min(1, "Phone number is required"),
+    firstName: zod_1.z.string().min(1, "First name is required"),
+    lastName: zod_1.z.string().min(1, "Last name is required"),
+    email: zod_1.z.string().email("Invalid email format"),
+    password: zod_1.z.string().min(6, "Password must be at least 6 characters long"),
+    // Location fields
+    latitude: zod_1.z
+        .number({
+        invalid_type_error: "Latitude must be a number",
+        required_error: "Latitude is required",
+    })
+        .min(-90)
+        .max(90, "Invalid latitude"),
+    longitude: zod_1.z
+        .number({
+        invalid_type_error: "Longitude must be a number",
+        required_error: "Longitude is required",
+    })
+        .min(-180)
+        .max(180, "Invalid longitude"),
+    city: zod_1.z.string().min(1, "City is required"),
+    // Address fields with conditional validation
+    street: zod_1.z.string().optional().default(""),
+    houseNumber: zod_1.z.string().optional().default(""),
+    landmark: zod_1.z.string().optional(),
+    apartment: zod_1.z.string().optional(),
+    estate: zod_1.z.string().optional(),
+    specialDescription: zod_1.z.string().optional(),
+    category: zod_1.z.string().optional(),
+    photoUrls: zod_1.z.array(zod_1.z.string()).optional(),
+    noStreetAddress: zod_1.z.boolean().optional().default(false),
+})
+    .refine((data) => {
+    // If noStreetAddress is false, street is required
+    if (!data.noStreetAddress && !data.street) {
+        return false;
+    }
+    return true;
+}, {
+    message: "Street is required when no street address is not specified",
+    path: ["street"],
+});
 // TODO: Move OTP storage logic (e.g., to memory cache, Redis, or DB)
 const otpStore = {};
 const OTP_EXPIRY_MINUTES = 5;
@@ -33,12 +95,20 @@ const generateToken = (userId, email) => {
 // --- Controller Functions ---
 // POST /api/auth/request-otp
 const requestOtp = async (req, res) => {
-    // TODO: Implement validation (e.g., Zod) for phoneNumber
-    const { phoneNumber } = req.body;
-    if (!phoneNumber) {
-        res.status(400).json({ error: "Phone number is required" });
+    // Validate request body with Zod
+    const validationResult = otpRequestSchema.safeParse(req.body);
+    if (!validationResult.success) {
+        const errors = validationResult.error.errors.map((err) => ({
+            field: err.path.join("."),
+            message: err.message,
+        }));
+        res.status(400).json({
+            error: errors[0]?.message || "Validation failed",
+            details: errors,
+        });
         return;
     }
+    const { phoneNumber } = validationResult.data;
     // Generate mock OTP
     const mockOtp = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
     const expiresAt = Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000;
@@ -52,12 +122,20 @@ const requestOtp = async (req, res) => {
 exports.requestOtp = requestOtp;
 // POST /api/auth/verify-otp
 const verifyOtp = async (req, res) => {
-    // TODO: Implement validation
-    const { phoneNumber, otp } = req.body;
-    if (!phoneNumber || !otp) {
-        res.status(400).json({ error: "Phone number and OTP are required" });
+    // Validate request body with Zod
+    const validationResult = otpVerifySchema.safeParse(req.body);
+    if (!validationResult.success) {
+        const errors = validationResult.error.errors.map((err) => ({
+            field: err.path.join("."),
+            message: err.message,
+        }));
+        res.status(400).json({
+            error: errors[0]?.message || "Validation failed",
+            details: errors,
+        });
         return;
     }
+    const { phoneNumber, otp } = validationResult.data;
     const storedOtpData = otpStore[phoneNumber];
     if (!storedOtpData) {
         res
@@ -86,31 +164,26 @@ const register = async (req, res) => {
     console.log("--- Registration Request Body ---");
     console.log(req.body);
     console.log("---------------------------------");
-    // TODO: Implement Zod validation for the entire registration payload
-    // const validationResult = registerSchema.safeParse(req.body);
-    // if (!validationResult.success) { ... }
-    const { phoneNumber, firstName, lastName, email, password, 
-    // Address fields - expect lat/lon, use them to generate code/state/lga
-    latitude, longitude, street, city, houseNumber, landmark, apartment, // Maps to floor
-    estate, specialDescription, photoUrls,
-    // Remove state, lga from destructuring as they are derived
-     } = req.body;
-    // --- Basic Checks (Replace with Zod) ---
-    if (!phoneNumber ||
-        !firstName ||
-        !lastName ||
-        !email ||
-        !password ||
-        !street ||
-        // !state || // Removed
-        // !lga || // Removed
-        !city ||
-        !latitude ||
-        !longitude) {
-        res.status(400).json({ error: "Missing required registration fields" });
+    // Validate request body with Zod
+    const validationResult = registerSchema.safeParse(req.body);
+    if (!validationResult.success) {
+        const errors = validationResult.error.errors.map((err) => ({
+            field: err.path.join("."),
+            message: err.message,
+        }));
+        console.log("Validation errors:", errors);
+        // Return first error message for simplicity (or return all errors)
+        res.status(400).json({
+            error: errors[0]?.message || "Validation failed",
+            details: errors,
+        });
         return;
     }
-    // TODO: Add password complexity checks
+    // Extract validated data
+    const { phoneNumber, firstName, lastName, email, password, latitude, longitude, street, city, houseNumber, landmark, apartment, estate, specialDescription, photoUrls, noStreetAddress, category, } = validationResult.data;
+    // Also extract the client-provided location codes
+    const clientStateCode = req.body.stateCode;
+    const clientLgaCode = req.body.lgaCode;
     try {
         // Check if user already exists (by email or phone)
         const existingUser = await db_1.db
@@ -148,44 +221,88 @@ const register = async (req, res) => {
             const newUser = newUserResult[0];
             if (!newUser)
                 throw new Error("Failed to create user record");
-            // --- Generate and parse HHG code for address ---
-            const hhgCode = await (0, addressing_1.generateHhgCode)(latitude, longitude);
-            if (!hhgCode) {
-                // If code generation fails (e.g., invalid coords), throw to rollback transaction
+            // --- Enhanced Address Generation (with rural support) ---
+            let enhancedAddressInfo;
+            let ddc = null;
+            let stateCode = "";
+            let lgaCode = "";
+            let areaType = "";
+            let areaCode = "";
+            let locationNumber = "";
+            try {
+                // Create user-provided description from available fields
+                let userDescription = "";
+                if (landmark)
+                    userDescription += landmark;
+                if (specialDescription) {
+                    userDescription += (userDescription ? ", " : "") + specialDescription;
+                }
+                // Use enhanced address generation for rural areas
+                enhancedAddressInfo = await (0, addressing_1.generateEnhancedAddress)(latitude, longitude, city, userDescription || undefined, noStreetAddress // Treat no street address as potentially rural
+                );
+                ddc = enhancedAddressInfo.hhgCode;
+                if (ddc) {
+                    const ddcInfo = (0, addressing_1.parseDDC)(ddc);
+                    if (ddcInfo) {
+                        ({ stateCode, lgaCode, areaType, areaCode, locationNumber } =
+                            ddcInfo);
+                    }
+                }
+            }
+            catch (error) {
+                console.warn("Enhanced address generation failed, falling back to basic DDC", error);
+                // Fallback to original DDC generation
+                let stateCodeForDDC;
+                if (city) {
+                    const cityLower = city.toLowerCase();
+                    if (cityLower.includes("lagos"))
+                        stateCodeForDDC = "LA";
+                    else if (cityLower.includes("abuja"))
+                        stateCodeForDDC = "FC";
+                    else if (cityLower.includes("kano"))
+                        stateCodeForDDC = "KN";
+                    else if (cityLower.includes("ibadan") || cityLower.includes("oyo"))
+                        stateCodeForDDC = "OY";
+                }
+                ddc = await (0, addressing_1.generateHhgCode)(latitude, longitude, stateCodeForDDC);
+                if (ddc) {
+                    const ddcInfo = (0, addressing_1.parseDDC)(ddc);
+                    if (ddcInfo) {
+                        ({ stateCode, lgaCode, areaType, areaCode, locationNumber } =
+                            ddcInfo);
+                    }
+                }
+            }
+            if (!ddc) {
                 throw new Error("Could not generate address code for the provided coordinates.");
             }
-            const codeParts = hhgCode.split("-");
-            if (codeParts.length !== 4) {
-                throw new Error("Internal error parsing generated address components.");
-            }
-            const stateCode = codeParts[1];
-            const lgaCode = codeParts[2];
-            // --- End HHG code generation ---
+            // --- End Enhanced Address Generation ---
             // Create address (linked to user) using correct schema
             const newAddressResult = await tx
                 .insert(schema_1.addresses)
                 .values({
                 userId: newUser.id,
-                street,
-                // Remove: state, lga, uniqueCode
-                // state: state,
-                // lga: lga,
+                street: noStreetAddress
+                    ? enhancedAddressInfo?.addressComponents?.primary || "" // Use generated street for rural areas
+                    : street, // Use provided street for urban areas
                 city,
-                houseNumber,
+                houseNumber: noStreetAddress ? "" : houseNumber, // Empty if no street address
                 landmark,
                 floor: apartment, // Map apartment to floor field
                 estate,
                 specialDescription,
                 photoUrls,
-                latitude: latitude.toString(), // Convert to string for decimal
-                longitude: longitude.toString(),
-                // Add: hhgCode, stateCode, lgaCode
-                hhgCode: hhgCode,
-                stateCode: stateCode,
-                lgaCode: lgaCode,
-                // uniqueCode: "TBD", // Removed
-                isSaved: true, // Assume primary address is saved
-                label: "Primary", // Default label?
+                latitude,
+                longitude,
+                hhgCode: ddc, // Store the full DDC as the hhgCode
+                stateCode: clientStateCode || stateCode, // Use client-provided first
+                lgaCode: clientLgaCode || lgaCode, // Use client-provided first
+                areaType,
+                areaCode,
+                locationNumber,
+                isSaved: true, // Default address should be saved
+                label: "Home", // Default label?
+                category: category,
             })
                 .returning();
             if (newAddressResult.length === 0)
@@ -225,12 +342,20 @@ const register = async (req, res) => {
 exports.register = register;
 // POST /api/auth/login
 const login = async (req, res) => {
-    // TODO: Implement Zod validation
-    const { email, password } = req.body;
-    if (!email || !password) {
-        res.status(400).json({ error: "Email and password are required" });
+    // Validate request body with Zod
+    const validationResult = loginSchema.safeParse(req.body);
+    if (!validationResult.success) {
+        const errors = validationResult.error.errors.map((err) => ({
+            field: err.path.join("."),
+            message: err.message,
+        }));
+        res.status(400).json({
+            error: errors[0]?.message || "Validation failed",
+            details: errors,
+        });
         return;
     }
+    const { email, password } = validationResult.data;
     try {
         // Find user by email
         const userResult = await db_1.db
