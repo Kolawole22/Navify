@@ -1,0 +1,42 @@
+### Get all states
+GET http://localhost:3000/api/locations/states
+Content-Type: application/json
+
+### Get LGAs for a specific state by state code
+GET http://localhost:3000/api/locations/states/LA/lgas
+Content-Type: application/json
+
+### Get LGAs for another state (example: Kano)
+GET http://localhost:3000/api/locations/states/KN/lgas
+Content-Type: application/json
+
+### Get all address categories
+GET http://localhost:3000/api/address/categories
+Content-Type: application/json
+
+### Create a new address (example)
+POST http://localhost:3000/api/addresses
+Content-Type: application/json
+Authorization: Bearer YOUR_TOKEN_HERE
+
+{
+  "label": "Home",
+  "state": "LA",
+  "lga": "ETI-OSA",
+  "city": "Lekki",
+  "street": "Admiralty Way",
+  "houseNumber": "123",
+  "landmark": "Near Lekki Mall",
+  "latitude": 6.4281,
+  "longitude": 3.4219,
+  "apartment": "Flat 4B",
+  "estate": "Lekki Phase 1",
+  "specialDescription": "Blue gate, white fence",
+  "category": "home",
+  "noStreetAddress": false
+}
+
+### Get user's saved addresses
+GET http://localhost:3000/api/addresses
+Content-Type: application/json
+Authorization: Bearer YOUR_TOKEN_HERE

@@ -1,0 +1,637 @@
+import { Request, Response } from "express";
+import { db } from "../db"; // Import Drizzle db instance
+import { addresses, addressBookmarks } from "../db/schema"; // Import Drizzle schemas
+import { eq, and, or, ilike, SQL } from "drizzle-orm"; // Import operators and SQL type
+import { z } from "zod";
+import { generateHhgCode, parseDDC } from "../utils/addressing"; // Import the DDC code generator and utilities
+import {
+  generateLocationDescription,
+  needsGeneratedStreetName,
+} from "../utils/location-description"; // Import location description utilities
+import { QRCodeService } from "../services/qrCodeService"; // Import QR code service
+
+// Validation Schema for Address Creation/Update
+// Aligned with Drizzle schema and project scope
+const addressInputSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  street: z.string().optional(), // Make street optional to support addresses without street names
+  city: z.string().min(1, "City is required"),
+  stateCode: z.string().length(2).optional(), // Two-letter state code (e.g., LA for Lagos)
+  lgaCode: z.string().optional(), // LGA code within the state
+  houseNumber: z.string().optional(), // Make houseNumber optional based on schema
+  estate: z.string().optional(),
+  specialDescription: z.string().optional(),
+  floor: z.string().optional(),
+  landmark: z.string().optional(),
+  category: z.string().optional(), // Add optional category
+  // context: z.string().optional(), // Removed context if not in schema
+  // userId is handled internally via auth
+  isSaved: z.boolean().optional().default(false), // Adjusted default to false
+  label: z.string().optional(), // Label primarily used when updating/saving
+  photoUrls: z.array(z.string().url()).optional(), // Added photoUrls based on schema
+});
+
+// Schema for updating only specific fields like label or saved status
+const addressUpdateSchema = z.object({
+  isSaved: z.boolean().optional(),
+  label: z.string().optional().nullable(), // Allow clearing label
+  category: z.string().optional().nullable(), // Allow updating/clearing category
+  // Potentially allow updating context/landmark later?
+});
+
+// Generate a unique Navify code (placeholder - consider a more robust method)
+// function generateUniqueAddressCode(): string {
+//   // Simple example, might need collision checks or a better algorithm
+//   const prefix = "NAV";
+//   const chars = "ABCDEFGHIJKLMNPQRSTUVWXYZ123456789"; // Reduced ambiguous chars
+//   let result = prefix;
+//   for (let i = 0; i < 6; i++) {
+//     result += chars.charAt(Math.floor(Math.random() * chars.length));
+//   }
+//   return result;
+//   // TODO: Ensure uniqueness in the database before finalizing
+// }
+
+// --- Controller Functions ---
+
+// Get all *saved* addresses for the authenticated user
+export const getAllSavedAddresses = async (req: Request, res: Response) => {
+  try {
+    // Assume userId is populated by authentication middleware
+    // @ts-ignore - Assuming req.user exists after auth middleware
+    const userId = req.user?.id as string | undefined;
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const userAddresses = await db
+      .select()
+      .from(addresses)
+      .where(
+        and(
+          eq(addresses.userId, userId),
+          eq(addresses.isSaved, true) // Only fetch explicitly saved addresses
+        )
+      )
+      .orderBy(addresses.updatedAt); // Or createdAt?
+
+    res.json(userAddresses);
+    return; // Explicitly return after sending response
+  } catch (error: any) {
+    console.error("Error fetching saved addresses:", error);
+    res.status(500).json({ error: "Failed to fetch saved addresses" });
+    return; // Explicitly return after sending response
+  }
+};
+
+// Get a specific address by its uniqueCode or DB ID
+export const getAddress = async (
+  req: Request<{ identifier: string }>, // Can be uniqueCode or DB ID
+  res: Response
+) => {
+  try {
+    const { identifier } = req.params;
+    // @ts-ignore
+    const userId = req.user?.id as string | undefined; // Needed for ownership check if it's a saved address
+
+    let addressResult;
+    let queryCondition: SQL<unknown>;
+
+    // Check if identifier is likely a number (DB ID) or string (uniqueCode)
+    const isDbId = /^\d+$/.test(identifier);
+
+    if (isDbId) {
+      queryCondition = eq(addresses.id, parseInt(identifier, 10));
+    } else {
+      queryCondition = eq(addresses.hhgCode, identifier);
+    }
+
+    addressResult = await db
+      .select()
+      .from(addresses)
+
+      .where(queryCondition)
+      .limit(1);
+
+    const address = addressResult[0];
+
+    if (!address) {
+      res.status(404).json({ error: "Address not found" });
+      return;
+    }
+
+    // If the address is associated with a user, check ownership
+    if (address.userId) {
+      if (!userId || address.userId !== userId) {
+        // Allow fetching public/unowned addresses? Or always require auth?
+        // For now, restrict access if it has a userId and doesn't match req.user.id
+        res
+          .status(403)
+          .json({ error: "Forbidden: You do not own this address" });
+        return;
+      }
+    }
+    // If address.userId is null, assume it's a generally accessible address (e.g., generated but not saved by a specific user)
+    // Modify this logic based on your application's access control requirements.
+
+    res.json(address);
+  } catch (error: any) {
+    console.error("Error fetching address:", error);
+    if (
+      error instanceof Error &&
+      error.message.includes("invalid input syntax for type integer")
+    ) {
+      res.status(400).json({ error: "Invalid address ID format" });
+      return;
+    }
+    res.status(500).json({ error: "Failed to fetch address" });
+    return;
+  }
+};
+
+// Create a new address entry (generates unique code)
+export const createAddress = async (req: Request, res: Response) => {
+  try {
+    // @ts-ignore
+    const userId = req.user?.id as string | undefined;
+
+    const validationResult = addressInputSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return res.status(400).json({
+        error: "Validation failed",
+        details: validationResult.error.format(),
+      });
+    }
+
+    const inputData = validationResult.data;
+
+    // Generate the Digital Door Code (DDC) using the utility
+    // Pass state and LGA codes if they're provided in the input
+    const ddc = await generateHhgCode(
+      inputData.latitude,
+      inputData.longitude,
+      inputData.stateCode,
+      inputData.lgaCode
+    );
+
+    if (!ddc) {
+      res.status(400).json({
+        error:
+          "Could not generate address code for the provided coordinates. Ensure location is within Nigeria.",
+      });
+      return;
+    }
+
+    // Parse DDC components (format: NG-XX-YY-ZZZ-NNNN)
+    const ddcInfo = parseDDC(ddc);
+    if (!ddcInfo) {
+      console.error(`Failed to parse generated DDC: ${ddc}`);
+      res
+        .status(500)
+        .json({ error: "Internal error generating address components." });
+      return;
+    }
+
+    const { stateCode, lgaCode, areaType, areaCode, locationNumber } = ddcInfo;
+
+    // Prepare data for insertion using the correct schema fields
+
+    // Handle missing or invalid street names
+    let streetName = inputData.street;
+    if (needsGeneratedStreetName(streetName)) {
+      // Generate a descriptive street name based on available information
+      streetName = generateLocationDescription({
+        latitude: inputData.latitude,
+        longitude: inputData.longitude,
+        cityName: inputData.city,
+        areaType: areaType,
+        areaCode: areaCode,
+        ddc: ddc,
+        nearbyLandmarks: inputData.landmark ? [inputData.landmark] : undefined,
+      });
+    }
+
+    // Generate QR code for the address
+    let qrCodeImageUrl: string | undefined;
+    try {
+      qrCodeImageUrl = await QRCodeService.generateAndSaveQRCode(ddc);
+    } catch (qrError) {
+      console.error("Failed to generate QR code:", qrError);
+      // Continue without QR code - it's not critical for address creation
+    }
+
+    const newAddressData = {
+      // Fields from input
+      latitude: inputData.latitude.toString(),
+      longitude: inputData.longitude.toString(),
+      street: streetName,
+      city: inputData.city,
+      houseNumber: inputData.houseNumber,
+      estate: inputData.estate,
+      floor: inputData.floor,
+      specialDescription: inputData.specialDescription,
+      landmark: inputData.landmark,
+      photoUrls: inputData.photoUrls,
+      userId: userId,
+      isSaved: inputData.isSaved,
+      label: inputData.label,
+      category: inputData.category,
+      // Derived/Generated fields
+      hhgCode: ddc, // Store the full DDC as the hhgCode
+      stateCode: stateCode,
+      lgaCode: lgaCode,
+      areaType: areaType,
+      areaCode: areaCode,
+      locationNumber: locationNumber,
+      qrCodeImageUrl: qrCodeImageUrl, // Store the QR code URL
+    };
+
+    const insertedResult = await db
+      .insert(addresses)
+      .values(newAddressData)
+      .returning();
+
+    const newAddress = insertedResult[0];
+
+    res.status(201).json(newAddress);
+    return;
+  } catch (error: unknown) {
+    console.error("Error creating address:", error);
+    // Handle potential unique constraint violation on hhgCode (less likely but possible)
+    res.status(500).json({ error: "Failed to create address" });
+    return;
+  }
+};
+
+// Update an existing address (e.g., save/unsave, add/change label)
+export const updateAddress = async (
+  req: Request<{ id: string }>, // Use DB ID for updates
+  res: Response
+) => {
+  try {
+    const addressId = parseInt(req.params.id, 10);
+    if (isNaN(addressId)) {
+      res.status(400).json({ error: "Invalid address ID format" });
+      return;
+    }
+
+    // @ts-ignore
+    const userId = req.user?.id as string | undefined;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const validationResult = addressUpdateSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      res.status(400).json({
+        error: "Validation failed",
+        details: validationResult.error.format(),
+      });
+      return;
+    }
+
+    const { isSaved, label, category } = validationResult.data;
+
+    // Construct update data - only include fields that are provided
+    const updateData: Partial<typeof addresses.$inferInsert> = {};
+    if (isSaved !== undefined) updateData.isSaved = isSaved;
+    // Allow setting label to null to clear it
+    if (label !== undefined) updateData.label = label;
+    if (category !== undefined) updateData.category = category;
+
+    // Check if there's anything to update
+    if (Object.keys(updateData).length === 0) {
+      res.status(400).json({ error: "No fields provided for update." });
+      return;
+    }
+
+    updateData.updatedAt = new Date(); // Manually update timestamp
+
+    const updatedResult = await db
+      .update(addresses)
+      .set(updateData)
+      .where(
+        and(
+          eq(addresses.id, addressId),
+          eq(addresses.userId, userId) // Ensure user owns the address
+        )
+      )
+      .returning();
+
+    const updatedAddress = updatedResult[0];
+
+    if (!updatedAddress) {
+      // Could be not found OR forbidden, check if address exists without userId condition?
+      // For simplicity, return 404, but could check existence first for a 403.
+      res.status(404).json({
+        error: "Address not found or you do not have permission to update it",
+      });
+      return;
+    }
+
+    res.json(updatedAddress);
+  } catch (error: unknown) {
+    console.error("Error updating address:", error);
+    res.status(500).json({ error: "Failed to update address" });
+  }
+};
+
+// Delete a saved address (logically or physically)
+export const deleteAddress = async (
+  req: Request<{ id: string }>, // Use DB ID for deletion
+  res: Response
+) => {
+  try {
+    const addressId = parseInt(req.params.id, 10);
+    if (isNaN(addressId)) {
+      res.status(400).json({ error: "Invalid address ID format" });
+      return;
+    }
+    // @ts-ignore
+    const userId = req.user?.id as string | undefined;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    // First, get the address to check if it has a QR code to clean up
+    const addressToDelete = await db
+      .select({ qrCodeImageUrl: addresses.qrCodeImageUrl })
+      .from(addresses)
+      .where(
+        and(
+          eq(addresses.id, addressId),
+          eq(addresses.userId, userId) // Ensure user owns the address
+        )
+      )
+      .limit(1);
+
+    if (addressToDelete.length === 0) {
+      res.status(404).json({
+        error: "Address not found or you do not have permission to delete it",
+      });
+      return;
+    }
+
+    // Delete the address
+    const deleteResult = await db
+      .delete(addresses)
+      .where(
+        and(
+          eq(addresses.id, addressId),
+          eq(addresses.userId, userId) // Ensure user owns the address
+        )
+      )
+      .returning({ id: addresses.id });
+
+    // Clean up the QR code file if it exists
+    if (addressToDelete[0].qrCodeImageUrl) {
+      try {
+        QRCodeService.deleteQRCode(addressToDelete[0].qrCodeImageUrl);
+      } catch (qrError) {
+        console.error("Failed to delete QR code file:", qrError);
+        // Continue - file cleanup failure shouldn't prevent address deletion
+      }
+    }
+
+    // If nothing was deleted, it means either the address didn't exist
+    // or it didn't belong to the user. Return 204 regardless for idempotency.
+    if (deleteResult.length === 0) {
+      // Optional: Log this case? "Attempted to delete non-existent or unauthorized address"
+    }
+
+    res.status(204).send();
+  } catch (error: any) {
+    console.error("Error deleting address:", error);
+    res.status(500).json({ error: "Failed to delete address" });
+  }
+};
+
+// Search for addresses based on a query string
+export const searchAddresses = async (req: Request, res: Response) => {
+  const query = req.query.q as string;
+
+  if (!query || typeof query !== "string" || query.trim().length < 1) {
+    res
+      .status(400)
+      .json({ error: "Search query 'q' is required and must be a string." });
+    return;
+  }
+
+  const searchTerm = `%${query.trim()}%`; // Prepare for LIKE/ILIKE
+  const limit = 5; // Limit results
+
+  try {
+    // @ts-ignore - Assuming req.user might exist for personalized search later
+    const userId = req.user?.id as string | undefined;
+
+    if (userId) {
+      // If user is authenticated, include bookmark information
+      const searchResults = await db
+        .select({
+          id: addresses.id,
+          hhgCode: addresses.hhgCode,
+          street: addresses.street,
+          city: addresses.city,
+          stateCode: addresses.stateCode,
+          lgaCode: addresses.lgaCode,
+          latitude: addresses.latitude,
+          longitude: addresses.longitude,
+          houseNumber: addresses.houseNumber,
+          estate: addresses.estate,
+          floor: addresses.floor,
+          landmark: addresses.landmark,
+          specialDescription: addresses.specialDescription,
+          category: addresses.category,
+          photoUrls: addresses.photoUrls,
+          isSaved: addresses.isSaved,
+          label: addresses.label,
+          userId: addresses.userId,
+          createdAt: addresses.createdAt,
+          updatedAt: addresses.updatedAt,
+          areaType: addresses.areaType,
+          areaCode: addresses.areaCode,
+          locationNumber: addresses.locationNumber,
+          bookmarkId: addressBookmarks.id, // Will be null if not bookmarked
+        })
+        .from(addresses)
+        .leftJoin(
+          addressBookmarks,
+          and(
+            eq(addressBookmarks.addressId, addresses.id),
+            eq(addressBookmarks.userId, userId)
+          )
+        )
+        .where(
+          or(
+            ilike(addresses.street, searchTerm),
+            ilike(addresses.city, searchTerm),
+            ilike(addresses.landmark, searchTerm),
+            ilike(addresses.estate, searchTerm),
+            ilike(addresses.specialDescription, searchTerm),
+            ilike(addresses.hhgCode, searchTerm)
+          )
+        )
+        .limit(limit)
+        .orderBy(addresses.city, addresses.street);
+
+      // Process results to add isBookmarked field
+      const processedResults = searchResults.map((result) => ({
+        ...result,
+        isBookmarked: !!result.bookmarkId,
+        bookmarkId: undefined, // Remove the bookmarkId from final result
+      }));
+
+      res.json(processedResults);
+    } else {
+      // If no user, just return addresses without bookmark info
+      const searchResults = await db
+        .select({
+          id: addresses.id,
+          hhgCode: addresses.hhgCode,
+          street: addresses.street,
+          city: addresses.city,
+          stateCode: addresses.stateCode,
+          lgaCode: addresses.lgaCode,
+          latitude: addresses.latitude,
+          longitude: addresses.longitude,
+          houseNumber: addresses.houseNumber,
+          estate: addresses.estate,
+          floor: addresses.floor,
+          landmark: addresses.landmark,
+          specialDescription: addresses.specialDescription,
+          category: addresses.category,
+          photoUrls: addresses.photoUrls,
+          isSaved: addresses.isSaved,
+          label: addresses.label,
+          userId: addresses.userId,
+          createdAt: addresses.createdAt,
+          updatedAt: addresses.updatedAt,
+          areaType: addresses.areaType,
+          areaCode: addresses.areaCode,
+          locationNumber: addresses.locationNumber,
+        })
+        .from(addresses)
+        .where(
+          or(
+            ilike(addresses.street, searchTerm),
+            ilike(addresses.city, searchTerm),
+            ilike(addresses.landmark, searchTerm),
+            ilike(addresses.estate, searchTerm),
+            ilike(addresses.specialDescription, searchTerm),
+            ilike(addresses.hhgCode, searchTerm)
+          )
+        )
+        .limit(limit)
+        .orderBy(addresses.city, addresses.street);
+
+      // Add isBookmarked as false for unauthenticated users
+      const processedResults = searchResults.map((result) => ({
+        ...result,
+        isBookmarked: false,
+      }));
+
+      res.json(processedResults);
+    }
+  } catch (error: any) {
+    console.error("Error searching addresses:", error);
+    res.status(500).json({ error: "Failed to search addresses" });
+  }
+};
+
+// --- Address Bookmarks ---
+export const bookmarkAddress = async (
+  req: Request<{ id: string }>,
+  res: Response
+) => {
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const addressId = Number(req.params.id);
+  if (!addressId) {
+    res.status(400).json({ error: "Invalid address id" });
+    return;
+  }
+  try {
+    // Check if already bookmarked
+    const existing = await db
+      .select()
+      .from(addressBookmarks)
+      .where(
+        and(
+          eq(addressBookmarks.userId, req.user.id),
+          eq(addressBookmarks.addressId, addressId)
+        )
+      );
+    if (existing.length > 0) {
+      res.status(409).json({ error: "Address already bookmarked" });
+      return;
+    }
+    await db
+      .insert(addressBookmarks)
+      .values({ userId: req.user.id, addressId });
+    res.status(201).json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to bookmark address" });
+  }
+};
+
+export const unbookmarkAddress = async (
+  req: Request<{ id: string }>,
+  res: Response
+) => {
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const addressId = Number(req.params.id);
+  if (!addressId) {
+    res.status(400).json({ error: "Invalid address id" });
+    return;
+  }
+  try {
+    await db
+      .delete(addressBookmarks)
+      .where(
+        and(
+          eq(addressBookmarks.userId, req.user.id),
+          eq(addressBookmarks.addressId, addressId)
+        )
+      );
+    res.status(204).send();
+  } catch (error) {
+    res.status(500).json({ error: "Failed to remove bookmark" });
+  }
+};
+
+export const getBookmarkedAddresses = async (req: Request, res: Response) => {
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  try {
+    // Join bookmarks and addresses
+    const bookmarks = await db
+      .select({
+        id: addresses.id,
+        hhgCode: addresses.hhgCode,
+        street: addresses.street,
+        city: addresses.city,
+        stateCode: addresses.stateCode,
+        lgaCode: addresses.lgaCode,
+        latitude: addresses.latitude,
+        longitude: addresses.longitude,
+        label: addresses.label,
+        createdAt: addresses.createdAt,
+      })
+      .from(addressBookmarks)
+      .innerJoin(addresses, eq(addressBookmarks.addressId, addresses.id))
+      .where(eq(addressBookmarks.userId, req.user.id));
+    res.json({ bookmarks });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch bookmarks" });
+  }
+};

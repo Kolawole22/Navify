@@ -1,0 +1,1 @@
+ALTER TABLE "addresses" ADD COLUMN "qr_code_image_url" text;

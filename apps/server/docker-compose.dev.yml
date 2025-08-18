@@ -1,0 +1,69 @@
+version: "3.8"
+
+services:
+  # PostgreSQL Database (same as production)
+  postgres:
+    image: postgres:15-alpine
+    container_name: navify-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: navify_dev
+      POSTGRES_USER: navify_user
+      POSTGRES_PASSWORD: navify_password
+      PGDATA: /data/postgres
+    volumes:
+      - postgres_dev_data:/data/postgres
+    ports:
+      - "5432:5432"
+    networks:
+      - navify-dev-network
+
+  # Redis (for development)
+  redis:
+    image: redis:7-alpine
+    container_name: navify-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    networks:
+      - navify-dev-network
+
+  # Backend API Service (Development with hot reload)
+  api-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: development
+    container_name: navify-api-dev
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+      - "9229:9229" # Debug port
+    environment:
+      NODE_ENV: development
+      PORT: 5001
+      DATABASE_URL: postgresql://navify_user:navify_password@postgres:5432/navify_dev
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: dev-jwt-secret-key-for-development-only
+      JWT_EXPIRES_IN_SECONDS: 86400
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - navify-dev-network
+    volumes:
+      - ./src:/app/src:ro
+      - ./logs:/app/logs
+      - node_modules:/app/node_modules
+    command: ["yarn", "dev"]
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
+  node_modules:
+
+networks:
+  navify-dev-network:
+    driver: bridge
