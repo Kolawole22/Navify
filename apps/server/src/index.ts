@@ -3,6 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import dotenv from "dotenv";
+import path from "path";
 
 // Import routes
 import addressRoutes from "./routes/address.routes"; // Corrected filename
@@ -13,6 +14,7 @@ import addressCategoriesRoutes from "./routes/address-categories.routes"; // Imp
 import locationHistoryRoutes from "./routes/location-history.routes"; // Import location history routes
 import notificationsRoutes from "./routes/notifications.routes"; // Import notifications routes
 import addressSharingRoutes from "./routes/address-sharing.routes"; // Import address sharing routes
+import qrCodeRoutes from "./routes/qr-code.routes"; // Import QR code routes
 // import authRoutes from "./routes/authRoutes"; // Keep commented until created
 
 // Load environment variables
@@ -29,6 +31,12 @@ app.use(morgan("dev")); // Logging
 app.use(express.json()); // Parse JSON bodies
 app.use(express.urlencoded({ extended: true })); // Body parser for URL-encoded requests
 
+// Serve static files (QR codes)
+app.use(
+  "/qr-codes",
+  express.static(path.join(__dirname, "../public/qr-codes"))
+);
+
 // Routes
 app.use("/api/addresses", addressRoutes); // Uncommented
 app.use("/api/users", userRoutes);
@@ -38,6 +46,7 @@ app.use("/api/address/categories", addressCategoriesRoutes); // Mount address ca
 app.use("/api/location-history", locationHistoryRoutes); // Mount location history routes
 app.use("/api/notifications", notificationsRoutes); // Mount notifications routes
 app.use("/api/address-sharing", addressSharingRoutes); // Mount address sharing routes
+app.use("/api/qr-code", qrCodeRoutes); // Mount QR code routes
 // app.use("/api/auth", authRoutes); // Keep commented
 
 // Health check endpoint

@@ -8,6 +8,7 @@ import {
   generateLocationDescription,
   needsGeneratedStreetName,
 } from "../utils/location-description"; // Import location description utilities
+import { QRCodeService } from "../services/qrCodeService"; // Import QR code service
 
 // Validation Schema for Address Creation/Update
 // Aligned with Drizzle schema and project scope
@@ -211,6 +212,15 @@ export const createAddress = async (req: Request, res: Response) => {
       });
     }
 
+    // Generate QR code for the address
+    let qrCodeImageUrl: string | undefined;
+    try {
+      qrCodeImageUrl = await QRCodeService.generateAndSaveQRCode(ddc);
+    } catch (qrError) {
+      console.error("Failed to generate QR code:", qrError);
+      // Continue without QR code - it's not critical for address creation
+    }
+
     const newAddressData = {
       // Fields from input
       latitude: inputData.latitude.toString(),
@@ -234,6 +244,7 @@ export const createAddress = async (req: Request, res: Response) => {
       areaType: areaType,
       areaCode: areaCode,
       locationNumber: locationNumber,
+      qrCodeImageUrl: qrCodeImageUrl, // Store the QR code URL
     };
 
     const insertedResult = await db
@@ -345,7 +356,26 @@ export const deleteAddress = async (
       return;
     }
 
-    // We only allow deleting addresses explicitly saved by the user.
+    // First, get the address to check if it has a QR code to clean up
+    const addressToDelete = await db
+      .select({ qrCodeImageUrl: addresses.qrCodeImageUrl })
+      .from(addresses)
+      .where(
+        and(
+          eq(addresses.id, addressId),
+          eq(addresses.userId, userId) // Ensure user owns the address
+        )
+      )
+      .limit(1);
+
+    if (addressToDelete.length === 0) {
+      res.status(404).json({
+        error: "Address not found or you do not have permission to delete it",
+      });
+      return;
+    }
+
+    // Delete the address
     const deleteResult = await db
       .delete(addresses)
       .where(
@@ -355,6 +385,16 @@ export const deleteAddress = async (
         )
       )
       .returning({ id: addresses.id });
+
+    // Clean up the QR code file if it exists
+    if (addressToDelete[0].qrCodeImageUrl) {
+      try {
+        QRCodeService.deleteQRCode(addressToDelete[0].qrCodeImageUrl);
+      } catch (qrError) {
+        console.error("Failed to delete QR code file:", qrError);
+        // Continue - file cleanup failure shouldn't prevent address deletion
+      }
+    }
 
     // If nothing was deleted, it means either the address didn't exist
     // or it didn't belong to the user. Return 204 regardless for idempotency.

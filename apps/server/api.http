@@ -3,7 +3,8 @@
 
 # --- Variables ---
 # @name baseUrl
-@baseUrl = http://localhost:3006/api
+# @baseUrl = http://localhost:3006/api
+@baseUrl = https://navify-api.onrender.com/api
 
 # Set this after logging in or registering
 @authToken = Bearer YOUR_AUTH_TOKEN_HERE
@@ -186,3 +187,14 @@ Authorization: {{authToken}}
 
 
 ####
+
+# @name GetAllStates
+# Get all states
+GET {{baseUrl}}/location/states
+Authorization: {{authToken}}
+
+###
+# @name GetAllLgas
+# Get all LGAs
+GET {{baseUrl}}/lgas
+Authorization: {{authToken}}

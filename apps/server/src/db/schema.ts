@@ -58,6 +58,7 @@ export const addresses = pgTable(
     specialDescription: text("special_description"),
     category: text("category"), // Added category field
     photoUrls: jsonb("photo_urls").$type<string[]>(), // Store array of photo URLs
+    qrCodeImageUrl: text("qr_code_image_url"), // URL to the generated QR code image
     isSaved: boolean("is_saved").default(false), // To mark if user explicitly saved this address
     label: text("label"), // User-defined label (e.g., "Mom's House")
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),

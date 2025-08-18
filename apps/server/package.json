@@ -13,12 +13,13 @@
     "lint": "eslint . --ext .ts",
     "drizzle:generate": "bun drizzle-kit generate",
     "drizzle:migrate": "bun drizzle-kit migrate",
-    "db:seed": "ts-node src/db/seed.ts",
+    "db:seed": "ts-node dist/db/seed.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:address": "ts-node src/tests/test-address-creation.ts",
     "test:address:manual": "ts-node src/tests/manual-address-test.ts",
-    "test:rural": "ts-node src/tests/test-rural-addressing.ts"
+    "test:rural": "ts-node src/tests/test-rural-addressing.ts",
+    "generate:qr-codes": "ts-node src/scripts/generate-qr-codes-for-existing-addresses.ts"
   },
   "keywords": [],
   "author": "",
@@ -28,6 +29,7 @@
     "@types/express": "^5.0.1",
     "@types/helmet": "^4.0.0",
     "@types/morgan": "^1.9.9",
+    "@types/qrcode": "^1.5.5",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
@@ -38,6 +40,7 @@
     "morgan": "^1.10.0",
     "ngeohash": "^0.6.3",
     "pg": "^8.15.6",
+    "qrcode": "^1.5.4",
     "zod": "^3.24.3"
   },
   "devDependencies": {
