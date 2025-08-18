@@ -34,10 +34,6 @@ router.delete("/:id", wrapAsync(deleteAddress));
 // Bookmark endpoints
 router.post("/:id/bookmark", protect, wrapAsync(bookmarkAddress));
 router.delete("/:id/bookmark", protect, wrapAsync(unbookmarkAddress));
-// Bookmarks list for current user
-const userRouter = express.Router();
-userRouter.get("/me/bookmarks", protect, wrapAsync(getBookmarkedAddresses));
-export { userRouter };
 
 // POST /api/addresses/rural-suggestions
 const getRuralSuggestions = async (req: Request, res: Response) => {

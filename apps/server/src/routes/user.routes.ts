@@ -9,6 +9,7 @@ import {
   getPreferences,
   updatePreferences,
 } from "../controllers/user.controller";
+import { getBookmarkedAddresses } from "../controllers/address.controller";
 import wrapAsync from "../utils/wrapAsync";
 import { protect } from "../middleware/auth.middleware";
 
@@ -29,6 +30,9 @@ router.get("/me/profile", protect, wrapAsync(getCurrentUserProfile));
 // User preferences endpoints
 router.get("/me/preferences", protect, wrapAsync(getPreferences));
 router.patch("/me/preferences", protect, wrapAsync(updatePreferences));
+
+// Bookmarks endpoint
+router.get("/me/bookmarks", protect, wrapAsync(getBookmarkedAddresses));
 
 // Note: User creation is typically handled via an authentication route (e.g., /api/auth/register)
 
