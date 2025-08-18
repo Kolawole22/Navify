@@ -32,6 +32,7 @@ router.patch("/:id", wrapAsync(updateAddress)); // Changed PUT to PATCH for part
 router.delete("/:id", wrapAsync(deleteAddress));
 
 // Bookmark endpoints
+router.get("/me/bookmarks", protect, wrapAsync(getBookmarkedAddresses));
 router.post("/:id/bookmark", protect, wrapAsync(bookmarkAddress));
 router.delete("/:id/bookmark", protect, wrapAsync(unbookmarkAddress));
 
