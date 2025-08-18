@@ -1,0 +1,25 @@
+{
+  "cli": {
+    "version": ">= 12.5.2",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDVlP-TM5z1kT8ZkbutEf09GFuJ5NbuLk4",
+        "EXPO_PUBLIC_API_BASE_URL": "https://navify.onrender.com/api"
+      }
+    },
+    "preview": {
+      "distribution": "internal"
+    },
+    "production": {
+      "autoIncrement": true
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
