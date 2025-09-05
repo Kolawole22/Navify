@@ -12,6 +12,7 @@ exports.users = (0, pg_core_1.pgTable)("users", {
     firstName: (0, pg_core_1.varchar)("first_name", { length: 255 }).notNull(),
     lastName: (0, pg_core_1.varchar)("last_name", { length: 255 }).notNull(),
     passwordHash: (0, pg_core_1.varchar)("password_hash", { length: 255 }).notNull(),
+    personalCode: (0, pg_core_1.text)("personal_code").unique(), // Personal code tied to user
     preferences: (0, pg_core_1.jsonb)("preferences").$type().default({}), // User settings/preferences
     // Add other user fields as needed, e.g., name, passwordHash, preferences
     createdAt: (0, pg_core_1.timestamp)("created_at").defaultNow().notNull(),
@@ -43,6 +44,7 @@ exports.addresses = (0, pg_core_1.pgTable)("addresses", {
     specialDescription: (0, pg_core_1.text)("special_description"),
     category: (0, pg_core_1.text)("category"), // Added category field
     photoUrls: (0, pg_core_1.jsonb)("photo_urls").$type(), // Store array of photo URLs
+    qrCodeImageUrl: (0, pg_core_1.text)("qr_code_image_url"), // URL to the generated QR code image
     isSaved: (0, pg_core_1.boolean)("is_saved").default(false), // To mark if user explicitly saved this address
     label: (0, pg_core_1.text)("label"), // User-defined label (e.g., "Mom's House")
     createdAt: (0, pg_core_1.timestamp)("created_at", { withTimezone: true }).defaultNow(),

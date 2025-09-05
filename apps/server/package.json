@@ -19,7 +19,10 @@
     "test:address": "ts-node src/tests/test-address-creation.ts",
     "test:address:manual": "ts-node src/tests/manual-address-test.ts",
     "test:rural": "ts-node src/tests/test-rural-addressing.ts",
-    "generate:qr-codes": "ts-node src/scripts/generate-qr-codes-for-existing-addresses.ts"
+    "generate:qr-codes": "ts-node src/scripts/generate-qr-codes-for-existing-addresses.ts",
+    "generate:personal-codes": "ts-node src/scripts/generatePersonalCodes.ts",
+    "update:personal-codes": "ts-node src/scripts/updatePersonalCodesToNewFormat.ts",
+    "verify:personal-codes": "ts-node src/scripts/verifyPersonalCodeUpdate.ts"
   },
   "keywords": [],
   "author": "",

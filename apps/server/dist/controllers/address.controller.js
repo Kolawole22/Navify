@@ -7,6 +7,7 @@ const drizzle_orm_1 = require("drizzle-orm"); // Import operators and SQL type
 const zod_1 = require("zod");
 const addressing_1 = require("../utils/addressing"); // Import the DDC code generator and utilities
 const location_description_1 = require("../utils/location-description"); // Import location description utilities
+const qrCodeService_1 = require("../services/qrCodeService"); // Import QR code service
 // Validation Schema for Address Creation/Update
 // Aligned with Drizzle schema and project scope
 const addressInputSchema = zod_1.z.object({
@@ -174,6 +175,15 @@ const createAddress = async (req, res) => {
                 nearbyLandmarks: inputData.landmark ? [inputData.landmark] : undefined,
             });
         }
+        // Generate QR code for the address
+        let qrCodeImageUrl;
+        try {
+            qrCodeImageUrl = await qrCodeService_1.QRCodeService.generateAndSaveQRCode(ddc);
+        }
+        catch (qrError) {
+            console.error("Failed to generate QR code:", qrError);
+            // Continue without QR code - it's not critical for address creation
+        }
         const newAddressData = {
             // Fields from input
             latitude: inputData.latitude.toString(),
@@ -197,6 +207,7 @@ const createAddress = async (req, res) => {
             areaType: areaType,
             areaCode: areaCode,
             locationNumber: locationNumber,
+            qrCodeImageUrl: qrCodeImageUrl, // Store the QR code URL
         };
         const insertedResult = await db_1.db
             .insert(schema_1.addresses)
@@ -291,12 +302,35 @@ res) => {
             res.status(401).json({ error: "Unauthorized" });
             return;
         }
-        // We only allow deleting addresses explicitly saved by the user.
+        // First, get the address to check if it has a QR code to clean up
+        const addressToDelete = await db_1.db
+            .select({ qrCodeImageUrl: schema_1.addresses.qrCodeImageUrl })
+            .from(schema_1.addresses)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.addresses.id, addressId), (0, drizzle_orm_1.eq)(schema_1.addresses.userId, userId) // Ensure user owns the address
+        ))
+            .limit(1);
+        if (addressToDelete.length === 0) {
+            res.status(404).json({
+                error: "Address not found or you do not have permission to delete it",
+            });
+            return;
+        }
+        // Delete the address
         const deleteResult = await db_1.db
             .delete(schema_1.addresses)
             .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.addresses.id, addressId), (0, drizzle_orm_1.eq)(schema_1.addresses.userId, userId) // Ensure user owns the address
         ))
             .returning({ id: schema_1.addresses.id });
+        // Clean up the QR code file if it exists
+        if (addressToDelete[0].qrCodeImageUrl) {
+            try {
+                qrCodeService_1.QRCodeService.deleteQRCode(addressToDelete[0].qrCodeImageUrl);
+            }
+            catch (qrError) {
+                console.error("Failed to delete QR code file:", qrError);
+                // Continue - file cleanup failure shouldn't prevent address deletion
+            }
+        }
         // If nothing was deleted, it means either the address didn't exist
         // or it didn't belong to the user. Return 204 regardless for idempotency.
         if (deleteResult.length === 0) {

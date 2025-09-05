@@ -238,6 +238,7 @@ export const getCurrentUserProfile = async (req: Request, res: Response) => {
         firstName: users.firstName,
         lastName: users.lastName,
         phoneNumber: users.phoneNumber,
+        personalCode: users.personalCode,
         preferences: users.preferences,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,

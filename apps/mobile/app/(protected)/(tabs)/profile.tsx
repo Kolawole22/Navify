@@ -6,15 +6,25 @@ import { useRouter } from "expo-router";
 import Button from "@/components/Button";
 import { SafeAreaContainer } from "@/components/SafeAreaContainer";
 import { useUserProfile } from "@/services/authService";
+import { extractPersonalCodeFromProfile } from "@/services/personalCodeService";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
+import * as Clipboard from "expo-clipboard";
+import * as Haptics from "expo-haptics";
+import { useToast } from "@/components/ToastProvider";
 
 export default function ProfileScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
   const { data: profile, isLoading, error } = useUserProfile();
+  const { showToast } = useToast();
+
+  // Extract personal code from profile data
+  const personalCodeData = profile
+    ? extractPersonalCodeFromProfile(profile)
+    : null;
 
   const handleLogout = () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
@@ -39,7 +49,7 @@ export default function ProfileScreen() {
   };
 
   const handleAddAddress = () => {
-    router.push("/(protected)/create-address");
+    router.push("/(protected)/create-new-address");
   };
 
   const handleViewLocationHistory = () => {
@@ -52,6 +62,21 @@ export default function ProfileScreen() {
 
   const handleViewSettings = () => {
     router.push("../settings");
+  };
+
+  const handleGeneratePersonalCode = () => {
+    router.push("../generate-personal-code");
+  };
+
+  const handleCopyPersonalCode = async () => {
+    if (personalCodeData?.personalCode) {
+      await Clipboard.setStringAsync(personalCodeData.personalCode);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      showToast({
+        message: "Personal code copied to clipboard!",
+        type: "success",
+      });
+    }
   };
 
   const getInitials = (firstName?: string, lastName?: string) => {
@@ -158,6 +183,60 @@ export default function ProfileScreen() {
           >
             Edit Profile
           </Button>
+        </View>
+
+        {/* Personal Code Section */}
+        <View className="bg-white mx-5 mb-5 rounded-2xl p-5 shadow-sm">
+          <View className="flex-row justify-between items-center mb-4">
+            <H2 className="text-lg font-bold text-gray-800">Personal Code</H2>
+            <TouchableOpacity onPress={handleGeneratePersonalCode}>
+              <TextNormal className="text-[#005C3E] font-medium">
+                {personalCodeData?.hasPersonalCode ? "Regenerate" : "Generate"}
+              </TextNormal>
+            </TouchableOpacity>
+          </View>
+
+          {personalCodeData?.hasPersonalCode &&
+          personalCodeData.personalCode ? (
+            <View className="bg-gray-50 rounded-xl p-4">
+              <View className="flex-row items-center justify-between mb-2">
+                <TextNormal className="text-gray-600 text-sm">
+                  Your Personal Code
+                </TextNormal>
+                <TouchableOpacity onPress={handleCopyPersonalCode}>
+                  <Ionicons name="copy-outline" size={20} color="#005C3E" />
+                </TouchableOpacity>
+              </View>
+              <TextNormal className="text-gray-800 font-mono text-lg">
+                {personalCodeData.personalCode}
+              </TextNormal>
+              <Body className="text-gray-500 text-sm mt-2">
+                This code is unique to you and combines your address with
+                personal information.
+              </Body>
+            </View>
+          ) : (
+            <View className="bg-blue-50 rounded-xl p-4">
+              <View className="flex-row items-center mb-2">
+                <Ionicons name="information-circle" size={20} color="#3b82f6" />
+                <TextNormal className="text-blue-800 font-medium ml-2">
+                  No Personal Code Yet
+                </TextNormal>
+              </View>
+              <Body className="text-blue-700 text-sm mb-3">
+                Generate your personal code to get a unique identifier that
+                combines your address with personal information.
+              </Body>
+              <TouchableOpacity
+                onPress={handleGeneratePersonalCode}
+                className="bg-blue-600 rounded-lg py-2 px-4 self-start"
+              >
+                <TextNormal className="text-white font-medium">
+                  Generate Code
+                </TextNormal>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* Stats Cards */}

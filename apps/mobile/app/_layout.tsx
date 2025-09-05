@@ -65,7 +65,18 @@ export default function RootLayout() {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
-  const queryClient = new QueryClient();
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        // With SSR, we usually want to set some default staleTime
+        // above 0 to avoid refetching immediately on the client
+        staleTime: 60 * 1000 * 5, // 1 minute
+        gcTime: 30 * 60 * 1000, // 10 minutes
+        refetchOnWindowFocus: true,
+        retry: 1,
+      },
+    },
+  });
 
   return (
     <SafeAreaProvider>

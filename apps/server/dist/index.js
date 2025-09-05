@@ -8,6 +8,7 @@ const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const morgan_1 = __importDefault(require("morgan"));
 const dotenv_1 = __importDefault(require("dotenv"));
+const path_1 = __importDefault(require("path"));
 // Import routes
 const address_routes_1 = __importDefault(require("./routes/address.routes")); // Corrected filename
 const user_routes_1 = __importDefault(require("./routes/user.routes"));
@@ -17,6 +18,7 @@ const address_categories_routes_1 = __importDefault(require("./routes/address-ca
 const location_history_routes_1 = __importDefault(require("./routes/location-history.routes")); // Import location history routes
 const notifications_routes_1 = __importDefault(require("./routes/notifications.routes")); // Import notifications routes
 const address_sharing_routes_1 = __importDefault(require("./routes/address-sharing.routes")); // Import address sharing routes
+const qr_code_routes_1 = __importDefault(require("./routes/qr-code.routes")); // Import QR code routes
 // import authRoutes from "./routes/authRoutes"; // Keep commented until created
 // Load environment variables
 dotenv_1.default.config();
@@ -29,6 +31,8 @@ app.use((0, cors_1.default)()); // Enable CORS
 app.use((0, morgan_1.default)("dev")); // Logging
 app.use(express_1.default.json()); // Parse JSON bodies
 app.use(express_1.default.urlencoded({ extended: true })); // Body parser for URL-encoded requests
+// Serve static files (QR codes)
+app.use("/qr-codes", express_1.default.static(path_1.default.join(__dirname, "../public/qr-codes")));
 // Routes
 app.use("/api/addresses", address_routes_1.default); // Uncommented
 app.use("/api/users", user_routes_1.default);
@@ -38,6 +42,7 @@ app.use("/api/address/categories", address_categories_routes_1.default); // Moun
 app.use("/api/location-history", location_history_routes_1.default); // Mount location history routes
 app.use("/api/notifications", notifications_routes_1.default); // Mount notifications routes
 app.use("/api/address-sharing", address_sharing_routes_1.default); // Mount address sharing routes
+app.use("/api/qr-code", qr_code_routes_1.default); // Mount QR code routes
 // app.use("/api/auth", authRoutes); // Keep commented
 // Health check endpoint
 app.get("/health", (_req, res) => {

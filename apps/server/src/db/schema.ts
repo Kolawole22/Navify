@@ -24,6 +24,7 @@ export const users = pgTable("users", {
   firstName: varchar("first_name", { length: 255 }).notNull(),
   lastName: varchar("last_name", { length: 255 }).notNull(),
   passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+  personalCode: text("personal_code").unique(), // Personal code tied to user
   preferences: jsonb("preferences").$type<Record<string, any>>().default({}), // User settings/preferences
   // Add other user fields as needed, e.g., name, passwordHash, preferences
   createdAt: timestamp("created_at").defaultNow().notNull(),

@@ -218,6 +218,7 @@ const getCurrentUserProfile = async (req, res) => {
             firstName: schema_1.users.firstName,
             lastName: schema_1.users.lastName,
             phoneNumber: schema_1.users.phoneNumber,
+            personalCode: schema_1.users.personalCode,
             preferences: schema_1.users.preferences,
             createdAt: schema_1.users.createdAt,
             updatedAt: schema_1.users.updatedAt,

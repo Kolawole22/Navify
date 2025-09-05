@@ -36,7 +36,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.userRouter = void 0;
 const express_1 = __importDefault(require("express"));
 const address_controller_1 = require("../controllers/address.controller"); // Correct import path
 const wrapAsync_1 = __importDefault(require("../utils/wrapAsync")); // Import the wrapper
@@ -55,12 +54,9 @@ router.patch("/:id", (0, wrapAsync_1.default)(address_controller_1.updateAddress
 // router.put("/:id", wrapAsync(updateAddress)); // Kept PUT in case full update is needed later
 router.delete("/:id", (0, wrapAsync_1.default)(address_controller_1.deleteAddress));
 // Bookmark endpoints
+router.get("/me/bookmarks", auth_middleware_1.protect, (0, wrapAsync_1.default)(address_controller_1.getBookmarkedAddresses));
 router.post("/:id/bookmark", auth_middleware_1.protect, (0, wrapAsync_1.default)(address_controller_1.bookmarkAddress));
 router.delete("/:id/bookmark", auth_middleware_1.protect, (0, wrapAsync_1.default)(address_controller_1.unbookmarkAddress));
-// Bookmarks list for current user
-const userRouter = express_1.default.Router();
-exports.userRouter = userRouter;
-userRouter.get("/me/bookmarks", auth_middleware_1.protect, (0, wrapAsync_1.default)(address_controller_1.getBookmarkedAddresses));
 // POST /api/addresses/rural-suggestions
 const getRuralSuggestions = async (req, res) => {
     const { latitude, longitude, city, userInput } = req.body;

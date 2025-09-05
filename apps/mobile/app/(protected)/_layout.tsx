@@ -77,10 +77,8 @@ export default function RootLayout() {
     <Stack screenOptions={{ headerShown: false }}>
       {/* Tab navigation */}
       <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
-
       {/* Modal screens */}
       <Stack.Screen name="modal" options={{ gestureEnabled: false }} />
-
       {/* Address-related screens */}
       <Stack.Screen
         name="create-address"
@@ -106,13 +104,22 @@ export default function RootLayout() {
           animation: "slide_from_bottom",
         }}
       />
-
       {/* Settings screens */}
       <Stack.Screen
         name="settings"
         options={{
           headerShown: true,
           headerTitle: "Settings",
+          headerShadowVisible: false,
+        }}
+      />
+      on sign up
+      {/* Personal Code screens */}
+      <Stack.Screen
+        name="generate-personal-code"
+        options={{
+          headerShown: true,
+          headerTitle: "Personal Code",
           headerShadowVisible: false,
         }}
       />
