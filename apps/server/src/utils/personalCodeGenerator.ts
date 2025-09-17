@@ -1,10 +1,8 @@
-import crypto from "crypto";
-
 /**
  * Personal Code Generator
- * Generates a user-friendly personal code that includes readable location information
- * Format: PC-{STATE}-{LGA}-{USER_ID_SHORT}-{CHECKSUM}
- * Example: PC-LA-001-ABC123-45
+ * Generates a simple 8-digit personal code with 4 letters and 4 numbers
+ * Format: 8 characters (4 letters + 4 numbers in any combination)
+ * Example: A1B2C3D4, 1A2B3C4D, ABCD1234, etc.
  */
 
 interface PersonalCodeData {
@@ -31,10 +29,10 @@ interface PersonalCodeData {
 }
 
 /**
- * Generate a user-friendly personal code
- * @param userData - User information
- * @param addressData - Address information
- * @returns Generated personal code
+ * Generate a simple 8-digit personal code with 4 letters and 4 numbers
+ * @param userData - User information (used for seeding to ensure consistency)
+ * @param addressData - Address information (not used in code generation)
+ * @returns Generated 8-digit personal code
  */
 export function createPersonalCode(
   userData: {
@@ -44,7 +42,7 @@ export function createPersonalCode(
     email: string;
     phoneNumber: string;
   },
-  addressData: {
+  _addressData: {
     latitude: string;
     longitude: string;
     stateCode: string;
@@ -54,170 +52,146 @@ export function createPersonalCode(
     houseNumber?: string;
   }
 ): string {
-  // Create a short, readable user identifier
-  const userShortId = generateUserShortId(userData);
-
-  // Generate checksum for validation
-  const checksum = generateChecksum(
-    addressData.stateCode + addressData.lgaCode + userShortId + userData.id
-  );
-
-  // Format: PC-{STATE}-{LGA}-{USER_SHORT_ID}-{CHECKSUM}
-  return `PC-${addressData.stateCode}-${addressData.lgaCode}-${userShortId}-${checksum}`;
+  // Generate a unique 8-character code with 4 letters and 4 numbers
+  return generateEightDigitCode(userData.id);
 }
 
 /**
- * Generate a short, readable user identifier
- * Uses first 3 letters of first name + last 3 letters of last name + 2 random chars
+ * Generate an 8-digit code with 4 letters and 4 numbers
+ * Uses user ID as seed for consistent generation
  */
-function generateUserShortId(userData: {
-  firstName: string;
-  lastName: string;
-  id: string;
-}): string {
-  const firstName = userData.firstName.toUpperCase().substring(0, 3);
-  const lastName = userData.lastName.toUpperCase().substring(0, 3);
+function generateEightDigitCode(userId: string): string {
+  // Create a deterministic seed from user ID for consistency
+  const seed = userId
+    .split("")
+    .reduce((acc, char) => acc + char.charCodeAt(0), 0);
 
-  // Add 2 random characters for uniqueness
-  const randomChars = crypto
-    .randomBytes(1)
-    .toString("hex")
-    .toUpperCase()
-    .substring(0, 2);
+  // Letters pool
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-  return `${firstName}${lastName}${randomChars}`;
-}
+  // Numbers pool
+  const numbers = "0123456789";
 
-/**
- * Generate a simple checksum for validation
- */
-function generateChecksum(data: string): string {
-  let sum = 0;
-  for (let i = 0; i < data.length; i++) {
-    sum += data.charCodeAt(i);
+  // Generate 4 random letters
+  const letterPositions = generateRandomPositions(seed, 4, 8);
+  const numberPositions = generateRandomPositions(seed + 1000, 4, 8);
+
+  // Create array of 8 characters
+  const code = new Array(8).fill("");
+
+  // Place letters at determined positions
+  letterPositions.forEach((pos) => {
+    const letterIndex = Math.floor(Math.random() * letters.length);
+    code[pos] = letters[letterIndex];
+  });
+
+  // Place numbers at determined positions
+  numberPositions.forEach((pos) => {
+    if (code[pos] === "") {
+      // Only if position is empty
+      const numberIndex = Math.floor(Math.random() * numbers.length);
+      code[pos] = numbers[numberIndex];
+    }
+  });
+
+  // Fill remaining positions with numbers
+  for (let i = 0; i < 8; i++) {
+    if (code[i] === "") {
+      const numberIndex = Math.floor(Math.random() * numbers.length);
+      code[i] = numbers[numberIndex];
+    }
   }
-  return (sum % 100).toString().padStart(2, "0");
+
+  return code.join("");
 }
 
 /**
- * Parse a personal code to extract readable information
+ * Generate random positions for letters/numbers using seeded random
+ */
+function generateRandomPositions(
+  seed: number,
+  count: number,
+  max: number
+): number[] {
+  const positions: number[] = [];
+  const used = new Set<number>();
+
+  // Simple seeded random number generator
+  let currentSeed = seed;
+  const seededRandom = () => {
+    currentSeed = (currentSeed * 9301 + 49297) % 233280;
+    return currentSeed / 233280;
+  };
+
+  while (positions.length < count) {
+    const pos = Math.floor(seededRandom() * max);
+    if (!used.has(pos)) {
+      positions.push(pos);
+      used.add(pos);
+    }
+  }
+
+  return positions.sort((a, b) => a - b);
+}
+
+/**
+ * Validate a personal code format (8 characters with 4 letters and 4 numbers)
  */
 export function parsePersonalCode(personalCode: string): {
   isValid: boolean;
-  stateCode?: string;
-  lgaCode?: string;
-  userShortId?: string;
-  checksum?: string;
+  letters?: string[];
+  numbers?: string[];
   error?: string;
 } {
   try {
-    // Format: PC-{STATE}-{LGA}-{USER_SHORT_ID}-{CHECKSUM}
-    const parts = personalCode.split("-");
-
-    if (parts.length !== 5 || parts[0] !== "PC") {
+    // Check length
+    if (personalCode.length !== 8) {
       return {
         isValid: false,
-        error: "Invalid personal code format",
+        error: "Personal code must be exactly 8 characters",
       };
     }
 
-    const [, stateCode, lgaCode, userShortId, checksum] = parts;
+    // Check if all characters are alphanumeric
+    if (!/^[A-Z0-9]+$/.test(personalCode.toUpperCase())) {
+      return {
+        isValid: false,
+        error: "Personal code must contain only letters and numbers",
+      };
+    }
 
-    // TODO: Add proper checksum validation
-    // For now, skip checksum validation to test basic parsing
+    const letters = personalCode.toUpperCase().match(/[A-Z]/g) || [];
+    const numbers = personalCode.match(/[0-9]/g) || [];
+
+    // Check if it has exactly 4 letters and 4 numbers
+    if (letters.length !== 4 || numbers.length !== 4) {
+      return {
+        isValid: false,
+        error: "Personal code must contain exactly 4 letters and 4 numbers",
+      };
+    }
 
     return {
       isValid: true,
-      stateCode,
-      lgaCode,
-      userShortId,
-      checksum,
+      letters,
+      numbers,
     };
-  } catch (error) {
+  } catch (error: any) {
     return {
       isValid: false,
-      error: "Failed to parse personal code",
+      error: error.message || "Unknown parsing error",
     };
   }
 }
 
 /**
- * Get state name from state code
- */
-export function getStateName(stateCode: string): string {
-  const stateMap: { [key: string]: string } = {
-    LA: "Lagos",
-    FC: "Abuja",
-    KN: "Kano",
-    OY: "Oyo",
-    RI: "Rivers",
-    AN: "Anambra",
-    KD: "Kaduna",
-    BA: "Bauchi",
-    BE: "Benue",
-    BO: "Borno",
-    CR: "Cross River",
-    DE: "Delta",
-    EB: "Ebonyi",
-    ED: "Edo",
-    EK: "Ekiti",
-    EN: "Enugu",
-    GO: "Gombe",
-    IM: "Imo",
-    JI: "Jigawa",
-    KE: "Kebbi",
-    KO: "Kogi",
-    KW: "Kwara",
-    NA: "Nasarawa",
-    NI: "Niger",
-    OG: "Ogun",
-    ON: "Ondo",
-    OS: "Osun",
-    PL: "Plateau",
-    SO: "Sokoto",
-    TA: "Taraba",
-    YO: "Yobe",
-    ZA: "Zamfara",
-  };
-
-  return stateMap[stateCode] || stateCode;
-}
-
-/**
- * Get LGA name from LGA code (this would need to be expanded with actual LGA data)
- */
-export function getLGAName(lgaCode: string, stateCode: string): string {
-  // This is a simplified version - in reality, you'd have a full LGA database
-  const lgaMap: { [key: string]: { [key: string]: string } } = {
-    LA: {
-      "001": "Ikeja",
-      "002": "Eti-Osa",
-      "003": "Lagos Island",
-      "004": "Lagos Mainland",
-      "005": "Surulere",
-      // Add more LGAs as needed
-    },
-    FC: {
-      "001": "Abuja Municipal",
-      "002": "Bwari",
-      "003": "Gwagwalada",
-      "004": "Kuje",
-      "005": "Kwali",
-      // Add more LGAs as needed
-    },
-    // Add more states as needed
-  };
-
-  return lgaMap[stateCode]?.[lgaCode] || `LGA-${lgaCode}`;
-}
-
-/**
- * Format personal code for display with readable information
+ * Format personal code for display
  */
 export function formatPersonalCodeForDisplay(personalCode: string): {
   code: string;
   readableInfo: string;
   isValid: boolean;
+  error?: string;
 } {
   const parsed = parsePersonalCode(personalCode);
 
@@ -226,15 +200,15 @@ export function formatPersonalCodeForDisplay(personalCode: string): {
       code: personalCode,
       readableInfo: "Invalid personal code",
       isValid: false,
+      error: parsed.error,
     };
   }
 
-  const stateName = getStateName(parsed.stateCode!);
-  const lgaName = getLGAName(parsed.lgaCode!, parsed.stateCode!);
-
   return {
     code: personalCode,
-    readableInfo: `${stateName} (${parsed.stateCode}), ${lgaName} (${parsed.lgaCode})`,
+    readableInfo: `8-digit code (${parsed.letters?.join(
+      ""
+    )} letters, ${parsed.numbers?.join("")} numbers)`,
     isValid: true,
   };
 }

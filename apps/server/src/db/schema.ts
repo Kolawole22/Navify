@@ -401,3 +401,125 @@ export const searchHistoryRelations = relations(searchHistory, ({ one }) => ({
     references: [addresses.id],
   }),
 }));
+
+// Live Location Sharing Tables
+
+// Live Location Sessions Table
+export const liveLocationSessions = pgTable(
+  "live_location_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sessionName: text("session_name").notNull(), // User-defined name for the session
+    isActive: boolean("is_active").default(true),
+    duration: integer("duration"), // Duration in minutes (null for indefinite)
+    expiresAt: timestamp("expires_at"), // When the session expires
+    lastLocationUpdate: timestamp("last_location_update"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => {
+    return {
+      userIdx: index("live_location_sessions_user_idx").on(table.userId),
+      activeIdx: index("live_location_sessions_active_idx").on(table.isActive),
+    };
+  }
+);
+
+// Live Location Shares Table (who can see the live location)
+export const liveLocationShares = pgTable(
+  "live_location_shares",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => liveLocationSessions.id, { onDelete: "cascade" }),
+    sharedWithPersonalCode: text("shared_with_personal_code").notNull(), // Personal code of the user who can see the location
+    sharedWithUserId: uuid("shared_with_user_id").references(() => users.id, {
+      onDelete: "cascade",
+    }), // Resolved user ID
+    canView: boolean("can_view").default(true),
+    lastViewedAt: timestamp("last_viewed_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => {
+    return {
+      sessionIdx: index("live_location_shares_session_idx").on(table.sessionId),
+      personalCodeIdx: index("live_location_shares_personal_code_idx").on(
+        table.sharedWithPersonalCode
+      ),
+      userIdx: index("live_location_shares_user_idx").on(
+        table.sharedWithUserId
+      ),
+    };
+  }
+);
+
+// Live Location Updates Table (stores location updates)
+export const liveLocationUpdates = pgTable(
+  "live_location_updates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => liveLocationSessions.id, { onDelete: "cascade" }),
+    latitude: decimal("latitude", { precision: 10, scale: 8 }).notNull(),
+    longitude: decimal("longitude", { precision: 11, scale: 8 }).notNull(),
+    accuracy: decimal("accuracy", { precision: 8, scale: 2 }), // Location accuracy in meters
+    speed: decimal("speed", { precision: 8, scale: 2 }), // Speed in m/s
+    heading: decimal("heading", { precision: 5, scale: 2 }), // Bearing in degrees
+    altitude: decimal("altitude", { precision: 8, scale: 2 }), // Altitude in meters
+    batteryLevel: integer("battery_level"), // Battery percentage
+    isCharging: boolean("is_charging"),
+    timestamp: timestamp("timestamp").defaultNow().notNull(),
+  },
+  (table) => {
+    return {
+      sessionIdx: index("live_location_updates_session_idx").on(
+        table.sessionId
+      ),
+      timestampIdx: index("live_location_updates_timestamp_idx").on(
+        table.timestamp
+      ),
+    };
+  }
+);
+
+// Live Location Relations
+export const liveLocationSessionsRelations = relations(
+  liveLocationSessions,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [liveLocationSessions.userId],
+      references: [users.id],
+    }),
+    shares: many(liveLocationShares),
+    updates: many(liveLocationUpdates),
+  })
+);
+
+export const liveLocationSharesRelations = relations(
+  liveLocationShares,
+  ({ one }) => ({
+    session: one(liveLocationSessions, {
+      fields: [liveLocationShares.sessionId],
+      references: [liveLocationSessions.id],
+    }),
+    sharedWithUser: one(users, {
+      fields: [liveLocationShares.sharedWithUserId],
+      references: [users.id],
+    }),
+  })
+);
+
+export const liveLocationUpdatesRelations = relations(
+  liveLocationUpdates,
+  ({ one }) => ({
+    session: one(liveLocationSessions, {
+      fields: [liveLocationUpdates.sessionId],
+      references: [liveLocationSessions.id],
+    }),
+  })
+);

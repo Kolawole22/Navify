@@ -68,6 +68,14 @@ export default function ProfileScreen() {
     router.push("../generate-personal-code");
   };
 
+  const handleShareLiveLocation = () => {
+    router.push("../live-location-sharing");
+  };
+
+  const handleViewLiveLocation = () => {
+    router.push("../live-location-viewer");
+  };
+
   const handleCopyPersonalCode = async () => {
     if (personalCodeData?.personalCode) {
       await Clipboard.setStringAsync(personalCodeData.personalCode);
@@ -360,6 +368,42 @@ export default function ProfileScreen() {
             ))}
           </View>
         )}
+
+        {/* Live Location Actions */}
+        <View className="bg-white mx-5 mb-5 rounded-2xl p-5 shadow-sm">
+          <H2 className="text-lg font-bold text-gray-800 mb-4">
+            Live Location Sharing
+          </H2>
+          <View className="flex-row justify-around">
+            <TouchableOpacity
+              className="items-center p-4 rounded-xl bg-green-50 min-w-[80px]"
+              onPress={handleShareLiveLocation}
+            >
+              <Ionicons name="location" size={24} color="#10b981" />
+              <TextNormal className="text-gray-800 mt-2 text-xs text-center">
+                Share Location
+              </TextNormal>
+            </TouchableOpacity>
+            <TouchableOpacity
+              className="items-center p-4 rounded-xl bg-blue-50 min-w-[80px]"
+              onPress={handleViewLiveLocation}
+            >
+              <Ionicons name="eye" size={24} color="#3b82f6" />
+              <TextNormal className="text-gray-800 mt-2 text-xs text-center">
+                View Location
+              </TextNormal>
+            </TouchableOpacity>
+            <TouchableOpacity
+              className="items-center p-4 rounded-xl bg-purple-50 min-w-[80px]"
+              onPress={() => router.push("../live-location-map")}
+            >
+              <Ionicons name="map" size={24} color="#8b5cf6" />
+              <TextNormal className="text-gray-800 mt-2 text-xs text-center">
+                Map View
+              </TextNormal>
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {/* Quick Actions */}
         <View className="bg-white mx-5 mb-5 rounded-2xl p-5 shadow-sm">

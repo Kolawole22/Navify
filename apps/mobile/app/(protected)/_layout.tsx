@@ -123,6 +123,31 @@ export default function RootLayout() {
           headerShadowVisible: false,
         }}
       />
+      {/* Live Location screens */}
+      <Stack.Screen
+        name="live-location-sharing"
+        options={{
+          headerShown: true,
+          headerTitle: "Share Live Location",
+          headerShadowVisible: false,
+        }}
+      />
+      <Stack.Screen
+        name="live-location-viewer"
+        options={{
+          headerShown: true,
+          headerTitle: "View Live Location",
+          headerShadowVisible: false,
+        }}
+      />
+      <Stack.Screen
+        name="live-location-map"
+        options={{
+          headerShown: false,
+          presentation: "fullScreenModal",
+          animation: "slide_from_bottom",
+        }}
+      />
     </Stack>
   );
 }

@@ -9,12 +9,13 @@ import { triggerToast } from "./toastController";
 // Use localhost for simulators/emulators on the same machine
 // Use your machine's network IP for physical devices
 // process.env.EXPO_PUBLIC_API_BASE_URL ||
-export const BASE_URL = "https://navify.onrender.com/api"; //"http://192.168.0.107:3006/api";
-// export const BASE_URL = "http://192.168.0.111:3006/api";
+// export const BASE_URL = "https://navify.onrender.com/api"; //"http://192.168.0.107:3006/api";
+export const BASE_URL = "http://192.168.0.109:3006";
+export const API_URL = BASE_URL + "/api";
 
 // --- Create Axios Instance ---
 const axiosInstance = axios.create({
-  baseURL: BASE_URL,
+  baseURL: API_URL,
   timeout: 10000, // 10 second timeout
   headers: {
     "Content-Type": "application/json",

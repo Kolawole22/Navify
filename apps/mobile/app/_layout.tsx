@@ -20,6 +20,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 // import Toast from "react-native-toast-message";
 // import { Toaster } from "sonner-native";
 import { ToastProvider } from "@/components/ToastProvider";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -89,57 +90,57 @@ function RootLayoutNav() {
             {/* <Toaster position="top-center" /> */}
 
             {/* <StatusBar style="auto" /> */}
-            {/* <KeyboardProvider> */}
-            <Stack>
-              {/* Protected routes */}
-              <Stack.Screen
-                name="(protected)"
-                options={{ headerShown: false }}
-              />
+            <KeyboardProvider>
+              <Stack>
+                {/* Protected routes */}
+                <Stack.Screen
+                  name="(protected)"
+                  options={{ headerShown: false }}
+                />
 
-              {/* Auth and onboarding routes */}
-              <Stack.Screen
-                name="onboarding"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="onboarding2"
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen name="login" options={{ headerShown: false }} />
+                {/* Auth and onboarding routes */}
+                <Stack.Screen
+                  name="onboarding"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="onboarding2"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen name="login" options={{ headerShown: false }} />
 
-              {/* Account creation flow */}
-              <Stack.Screen
-                name="create-account"
-                options={{
-                  headerTitle: "Enter your phone number",
-                  headerShadowVisible: false,
-                }}
-              />
-              <Stack.Screen
-                name="verify-phone"
-                options={{
-                  headerTitle: "Verification code",
-                  headerShadowVisible: false,
-                }}
-              />
-              <Stack.Screen
-                name="personal-info"
-                options={{
-                  headerTitle: "Personal information",
-                  headerShadowVisible: false,
-                }}
-              />
-              <Stack.Screen
-                name="address-info"
-                options={{
-                  headerTitle: "Address information",
-                  headerShadowVisible: false,
-                }}
-              />
-            </Stack>
+                {/* Account creation flow */}
+                <Stack.Screen
+                  name="create-account"
+                  options={{
+                    headerTitle: "Enter your phone number",
+                    headerShadowVisible: false,
+                  }}
+                />
+                <Stack.Screen
+                  name="verify-phone"
+                  options={{
+                    headerTitle: "Verification code",
+                    headerShadowVisible: false,
+                  }}
+                />
+                <Stack.Screen
+                  name="personal-info"
+                  options={{
+                    headerTitle: "Personal information",
+                    headerShadowVisible: false,
+                  }}
+                />
+                <Stack.Screen
+                  name="address-info"
+                  options={{
+                    headerTitle: "Address information",
+                    headerShadowVisible: false,
+                  }}
+                />
+              </Stack>
+            </KeyboardProvider>
           </ToastProvider>
-          {/* </KeyboardProvider> */}
         </ThemeProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
