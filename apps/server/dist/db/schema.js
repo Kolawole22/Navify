@@ -1,7 +1,7 @@
 "use strict";
 // This file will contain your Drizzle ORM schema definitions.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.searchHistoryRelations = exports.addressRatingsRelations = exports.offlineMapsRelations = exports.addressSharesRelations = exports.notificationsRelations = exports.userSessionsRelations = exports.locationHistoryRelations = exports.searchHistory = exports.addressRatings = exports.offlineMaps = exports.addressShares = exports.notifications = exports.userSessions = exports.locationHistory = exports.addressBookmarks = exports.addressesRelations = exports.addressCategoriesRelations = exports.addressCategories = exports.lgaRelations = exports.stateRelations = exports.lgas = exports.states = exports.usersRelations = exports.addresses = exports.users = void 0;
+exports.liveLocationUpdatesRelations = exports.liveLocationSharesRelations = exports.liveLocationSessionsRelations = exports.liveLocationUpdates = exports.liveLocationShares = exports.liveLocationSessions = exports.searchHistoryRelations = exports.addressRatingsRelations = exports.offlineMapsRelations = exports.addressSharesRelations = exports.notificationsRelations = exports.userSessionsRelations = exports.locationHistoryRelations = exports.searchHistory = exports.addressRatings = exports.offlineMaps = exports.addressShares = exports.notifications = exports.userSessions = exports.locationHistory = exports.addressBookmarks = exports.addressesRelations = exports.addressCategoriesRelations = exports.addressCategories = exports.lgaRelations = exports.stateRelations = exports.lgas = exports.states = exports.usersRelations = exports.addresses = exports.users = void 0;
 const drizzle_orm_1 = require("drizzle-orm");
 const pg_core_1 = require("drizzle-orm/pg-core");
 // Users Table
@@ -331,6 +331,92 @@ exports.searchHistoryRelations = (0, drizzle_orm_1.relations)(exports.searchHist
     selectedResult: one(exports.addresses, {
         fields: [exports.searchHistory.selectedResult],
         references: [exports.addresses.id],
+    }),
+}));
+// Live Location Sharing Tables
+// Live Location Sessions Table
+exports.liveLocationSessions = (0, pg_core_1.pgTable)("live_location_sessions", {
+    id: (0, pg_core_1.uuid)("id").primaryKey().defaultRandom(),
+    userId: (0, pg_core_1.uuid)("user_id")
+        .notNull()
+        .references(() => exports.users.id, { onDelete: "cascade" }),
+    sessionName: (0, pg_core_1.text)("session_name").notNull(), // User-defined name for the session
+    isActive: (0, pg_core_1.boolean)("is_active").default(true),
+    duration: (0, pg_core_1.integer)("duration"), // Duration in minutes (null for indefinite)
+    expiresAt: (0, pg_core_1.timestamp)("expires_at"), // When the session expires
+    lastLocationUpdate: (0, pg_core_1.timestamp)("last_location_update"),
+    createdAt: (0, pg_core_1.timestamp)("created_at").defaultNow().notNull(),
+    updatedAt: (0, pg_core_1.timestamp)("updated_at").defaultNow().notNull(),
+}, (table) => {
+    return {
+        userIdx: (0, pg_core_1.index)("live_location_sessions_user_idx").on(table.userId),
+        activeIdx: (0, pg_core_1.index)("live_location_sessions_active_idx").on(table.isActive),
+    };
+});
+// Live Location Shares Table (who can see the live location)
+exports.liveLocationShares = (0, pg_core_1.pgTable)("live_location_shares", {
+    id: (0, pg_core_1.uuid)("id").primaryKey().defaultRandom(),
+    sessionId: (0, pg_core_1.uuid)("session_id")
+        .notNull()
+        .references(() => exports.liveLocationSessions.id, { onDelete: "cascade" }),
+    sharedWithPersonalCode: (0, pg_core_1.text)("shared_with_personal_code").notNull(), // Personal code of the user who can see the location
+    sharedWithUserId: (0, pg_core_1.uuid)("shared_with_user_id").references(() => exports.users.id, {
+        onDelete: "cascade",
+    }), // Resolved user ID
+    canView: (0, pg_core_1.boolean)("can_view").default(true),
+    lastViewedAt: (0, pg_core_1.timestamp)("last_viewed_at"),
+    createdAt: (0, pg_core_1.timestamp)("created_at").defaultNow().notNull(),
+}, (table) => {
+    return {
+        sessionIdx: (0, pg_core_1.index)("live_location_shares_session_idx").on(table.sessionId),
+        personalCodeIdx: (0, pg_core_1.index)("live_location_shares_personal_code_idx").on(table.sharedWithPersonalCode),
+        userIdx: (0, pg_core_1.index)("live_location_shares_user_idx").on(table.sharedWithUserId),
+    };
+});
+// Live Location Updates Table (stores location updates)
+exports.liveLocationUpdates = (0, pg_core_1.pgTable)("live_location_updates", {
+    id: (0, pg_core_1.uuid)("id").primaryKey().defaultRandom(),
+    sessionId: (0, pg_core_1.uuid)("session_id")
+        .notNull()
+        .references(() => exports.liveLocationSessions.id, { onDelete: "cascade" }),
+    latitude: (0, pg_core_1.decimal)("latitude", { precision: 10, scale: 8 }).notNull(),
+    longitude: (0, pg_core_1.decimal)("longitude", { precision: 11, scale: 8 }).notNull(),
+    accuracy: (0, pg_core_1.decimal)("accuracy", { precision: 8, scale: 2 }), // Location accuracy in meters
+    speed: (0, pg_core_1.decimal)("speed", { precision: 8, scale: 2 }), // Speed in m/s
+    heading: (0, pg_core_1.decimal)("heading", { precision: 5, scale: 2 }), // Bearing in degrees
+    altitude: (0, pg_core_1.decimal)("altitude", { precision: 8, scale: 2 }), // Altitude in meters
+    batteryLevel: (0, pg_core_1.integer)("battery_level"), // Battery percentage
+    isCharging: (0, pg_core_1.boolean)("is_charging"),
+    timestamp: (0, pg_core_1.timestamp)("timestamp").defaultNow().notNull(),
+}, (table) => {
+    return {
+        sessionIdx: (0, pg_core_1.index)("live_location_updates_session_idx").on(table.sessionId),
+        timestampIdx: (0, pg_core_1.index)("live_location_updates_timestamp_idx").on(table.timestamp),
+    };
+});
+// Live Location Relations
+exports.liveLocationSessionsRelations = (0, drizzle_orm_1.relations)(exports.liveLocationSessions, ({ one, many }) => ({
+    user: one(exports.users, {
+        fields: [exports.liveLocationSessions.userId],
+        references: [exports.users.id],
+    }),
+    shares: many(exports.liveLocationShares),
+    updates: many(exports.liveLocationUpdates),
+}));
+exports.liveLocationSharesRelations = (0, drizzle_orm_1.relations)(exports.liveLocationShares, ({ one }) => ({
+    session: one(exports.liveLocationSessions, {
+        fields: [exports.liveLocationShares.sessionId],
+        references: [exports.liveLocationSessions.id],
+    }),
+    sharedWithUser: one(exports.users, {
+        fields: [exports.liveLocationShares.sharedWithUserId],
+        references: [exports.users.id],
+    }),
+}));
+exports.liveLocationUpdatesRelations = (0, drizzle_orm_1.relations)(exports.liveLocationUpdates, ({ one }) => ({
+    session: one(exports.liveLocationSessions, {
+        fields: [exports.liveLocationUpdates.sessionId],
+        references: [exports.liveLocationSessions.id],
     }),
 }));
 //# sourceMappingURL=schema.js.map

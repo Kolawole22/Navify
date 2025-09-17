@@ -9,6 +9,8 @@ const helmet_1 = __importDefault(require("helmet"));
 const morgan_1 = __importDefault(require("morgan"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const path_1 = __importDefault(require("path"));
+const http_1 = require("http");
+const websocket_service_1 = __importDefault(require("./services/websocket.service"));
 // Import routes
 const address_routes_1 = __importDefault(require("./routes/address.routes")); // Corrected filename
 const user_routes_1 = __importDefault(require("./routes/user.routes"));
@@ -19,12 +21,15 @@ const location_history_routes_1 = __importDefault(require("./routes/location-his
 const notifications_routes_1 = __importDefault(require("./routes/notifications.routes")); // Import notifications routes
 const address_sharing_routes_1 = __importDefault(require("./routes/address-sharing.routes")); // Import address sharing routes
 const qr_code_routes_1 = __importDefault(require("./routes/qr-code.routes")); // Import QR code routes
+const liveLocation_routes_1 = __importDefault(require("./routes/liveLocation.routes")); // Import live location routes
 // import authRoutes from "./routes/authRoutes"; // Keep commented until created
 // Load environment variables
 dotenv_1.default.config();
 // Create Express app
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5001;
+// Create HTTP server
+const server = (0, http_1.createServer)(app);
 // Middleware
 app.use((0, helmet_1.default)()); // Security headers
 app.use((0, cors_1.default)()); // Enable CORS
@@ -43,6 +48,7 @@ app.use("/api/location-history", location_history_routes_1.default); // Mount lo
 app.use("/api/notifications", notifications_routes_1.default); // Mount notifications routes
 app.use("/api/address-sharing", address_sharing_routes_1.default); // Mount address sharing routes
 app.use("/api/qr-code", qr_code_routes_1.default); // Mount QR code routes
+app.use("/api/live-location", liveLocation_routes_1.default); // Mount live location routes
 // app.use("/api/auth", authRoutes); // Keep commented
 // Health check endpoint
 app.get("/health", (_req, res) => {
@@ -60,9 +66,12 @@ app.use((err, _req, res, _next) => {
         message: process.env.NODE_ENV === "development" ? err.message : undefined,
     });
 });
+// Initialize WebSocket service
+websocket_service_1.default.getInstance(server);
 // Start server
-const server = app.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`🚀 Server running in ${process.env.NODE_ENV || "development"} mode on port ${PORT}`);
+    console.log(`🔌 WebSocket server initialized`);
 });
 // Graceful shutdown
 process.on("SIGTERM", () => {

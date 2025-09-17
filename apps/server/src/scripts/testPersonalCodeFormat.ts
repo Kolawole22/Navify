@@ -34,10 +34,10 @@ console.log("Generated Personal Code:", personalCode);
 const parsed = parsePersonalCode(personalCode);
 console.log("\nParsed Information:");
 console.log("- Valid:", parsed.isValid);
-console.log("- State Code:", parsed.stateCode);
-console.log("- LGA Code:", parsed.lgaCode);
-console.log("- User Short ID:", parsed.userShortId);
-console.log("- Checksum:", parsed.checksum);
+// console.log("- State Code:", parsed.stateCode);
+// console.log("- LGA Code:", parsed.lgaCode);
+// console.log("- User Short ID:", parsed.userShortId);
+// console.log("- Checksum:", parsed.checksum);
 
 // Format for display
 const display = formatPersonalCodeForDisplay(personalCode);
