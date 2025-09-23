@@ -21,6 +21,8 @@ export default function ProfileScreen() {
   const { data: profile, isLoading, error } = useUserProfile();
   const { showToast } = useToast();
 
+  console.log("profile", profile);
+
   // Extract personal code from profile data
   const personalCodeData = profile
     ? extractPersonalCodeFromProfile(profile)

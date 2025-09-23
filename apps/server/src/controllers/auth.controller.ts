@@ -538,6 +538,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
         firstName: users.firstName,
         lastName: users.lastName,
         phoneNumber: users.phoneNumber,
+        personalCode: users.personalCode,
         createdAt: users.createdAt,
         // isVerified: users.isVerified,
         // Add other fields as needed

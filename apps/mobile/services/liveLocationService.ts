@@ -1,5 +1,4 @@
 import * as Location from "expo-location";
-import * as Battery from "expo-battery";
 import { io, Socket } from "socket.io-client";
 import axiosInstance, { BASE_URL } from "../lib/axiosInstance";
 import { useAuthStore } from "../store/authStore";
@@ -265,7 +264,18 @@ class LiveLocationService {
 
   // Initialize battery monitoring
   private async initializeBatteryMonitoring() {
+    // Feature toggle: flip to true when your dev build includes expo-battery
+    const BATTERY_ENABLED = false;
+    if (!BATTERY_ENABLED) {
+      // Dummy defaults for dev build without battery module
+      this.currentBatteryLevel = 75;
+      this.currentIsCharging = false;
+      return;
+    }
+
     try {
+      const Battery = await import("expo-battery");
+
       // Get initial battery state
       const batteryLevel = await Battery.getBatteryLevelAsync();
       const batteryState = await Battery.getBatteryStateAsync();
@@ -277,7 +287,6 @@ class LiveLocationService {
       this.batteryLevelSubscription = Battery.addBatteryLevelListener(
         ({ batteryLevel }) => {
           this.currentBatteryLevel = Math.round(batteryLevel * 100);
-          console.log("Battery level updated:", this.currentBatteryLevel);
         }
       );
 
@@ -286,14 +295,8 @@ class LiveLocationService {
         ({ batteryState }) => {
           this.currentIsCharging =
             batteryState === Battery.BatteryState.CHARGING;
-          console.log(
-            "Battery charging state updated:",
-            this.currentIsCharging
-          );
         }
       );
-
-      console.log("Battery monitoring initialized");
     } catch (error) {
       console.error("Error initializing battery monitoring:", error);
     }
@@ -327,20 +330,23 @@ class LiveLocationService {
 
   // Get battery information (fallback method)
   private async getBatteryInfo() {
+    // Feature toggle kept in sync with initializeBatteryMonitoring
+    const BATTERY_ENABLED = false;
+    if (!BATTERY_ENABLED) {
+      return { batteryLevel: 75, isCharging: false };
+    }
+
     try {
+      const Battery = await import("expo-battery");
       const batteryLevel = await Battery.getBatteryLevelAsync();
       const batteryState = await Battery.getBatteryStateAsync();
-
       return {
-        batteryLevel: Math.round(batteryLevel * 100), // Convert to percentage
+        batteryLevel: Math.round(batteryLevel * 100),
         isCharging: batteryState === Battery.BatteryState.CHARGING,
       };
     } catch (error) {
       console.error("Error getting battery info:", error);
-      return {
-        batteryLevel: undefined,
-        isCharging: undefined,
-      };
+      return { batteryLevel: undefined, isCharging: undefined };
     }
   }
 
