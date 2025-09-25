@@ -11,6 +11,7 @@ interface User {
   firstName?: string;
   lastName?: string;
   phoneNumber?: string;
+  personalCode?: string;
   // Add other relevant user fields
 }
 

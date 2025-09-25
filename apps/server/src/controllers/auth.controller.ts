@@ -427,6 +427,9 @@ export const register = async (req: Request, res: Response) => {
         id: result.id,
         email: result.email,
         firstName: result.firstName,
+        lastName: result.lastName,
+        phoneNumber: result.phoneNumber,
+        personalCode: result.personalCode,
         // Include other needed fields
       },
       token,

@@ -11,6 +11,7 @@ interface User {
   firstName?: string; // Keep for API response parsing if separate
   lastName?: string;
   phoneNumber?: string;
+  personalCode?: string; // Personal code for sharing and identification
 }
 
 interface AuthResponse {
@@ -83,6 +84,7 @@ export interface UserProfile {
     firstName: string;
     lastName: string;
     phoneNumber: string;
+    personalCode: string | null;
     fullName: string;
     preferences: Record<string, any>;
     createdAt: string;
@@ -259,6 +261,7 @@ export const useRegister = () => {
         firstName: data.user.firstName,
         lastName: data.user.lastName,
         phoneNumber: data.user.phoneNumber,
+        personalCode: data.user.personalCode,
       };
       loginAction(storeUser, data.token);
       queryClient.invalidateQueries({ queryKey: ["currentUser"] });
@@ -284,6 +287,7 @@ export const useLogin = () => {
         firstName: data.user.firstName,
         lastName: data.user.lastName,
         phoneNumber: data.user.phoneNumber,
+        personalCode: data.user.personalCode,
       };
       loginAction(storeUser, data.token);
       queryClient.invalidateQueries({ queryKey: ["currentUser"] });

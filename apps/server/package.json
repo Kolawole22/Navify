@@ -25,6 +25,9 @@
     "update:personal-codes-8digit": "ts-node src/scripts/updatePersonalCodesToEightDigitFormat.ts",
     "verify:personal-codes": "ts-node src/scripts/verifyPersonalCodeUpdate.ts",
     "verify:personal-codes-8digit": "ts-node src/scripts/verifyEightDigitPersonalCodes.ts",
+    "pc:check": "ts-node src/scripts/verifyEightDigitPersonalCodes.ts",
+    "pc:backfill": "ts-node src/scripts/generatePersonalCodes.ts",
+    "pc:auto": "ts-node src/scripts/checkAndBackfillPersonalCodes.ts",
     "test:personal-code-format": "ts-node src/scripts/testNewPersonalCodeFormat.ts"
   },
   "keywords": [],

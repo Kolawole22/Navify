@@ -248,6 +248,7 @@ export const getCurrentUserProfile = async (req: Request, res: Response) => {
       .limit(1);
 
     const user = userResult[0];
+    console.log("user", user);
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
