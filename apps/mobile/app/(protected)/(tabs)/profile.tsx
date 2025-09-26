@@ -21,7 +21,7 @@ export default function ProfileScreen() {
   const { data: profile, isLoading, error } = useUserProfile();
   const { showToast } = useToast();
 
-  console.log("profile", profile);
+  // console.log("profile", profile);
 
   // Extract personal code from profile data
   const personalCodeData = profile
@@ -199,11 +199,11 @@ export default function ProfileScreen() {
         <View className="bg-white mx-5 mb-5 rounded-2xl p-5 shadow-sm">
           <View className="flex-row justify-between items-center mb-4">
             <H2 className="text-lg font-bold text-gray-800">Personal Code</H2>
-            <TouchableOpacity onPress={handleGeneratePersonalCode}>
+            {/* <TouchableOpacity onPress={handleGeneratePersonalCode}>
               <TextNormal className="text-[#005C3E] font-medium">
                 {personalCodeData?.hasPersonalCode ? "Regenerate" : "Generate"}
               </TextNormal>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
           </View>
 
           {personalCodeData?.hasPersonalCode &&

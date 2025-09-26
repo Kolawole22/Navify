@@ -28,6 +28,9 @@
     "pc:check": "ts-node src/scripts/verifyEightDigitPersonalCodes.ts",
     "pc:backfill": "ts-node src/scripts/generatePersonalCodes.ts",
     "pc:auto": "ts-node src/scripts/checkAndBackfillPersonalCodes.ts",
+    "migrate:simplified-format": "ts-node src/scripts/update-addresses-to-simplified-format.ts",
+    "analyze:address-formats": "ts-node src/scripts/rollback-simplified-format.ts",
+    "fix:house-numbers": "ts-node src/scripts/force-update-house-numbers.ts",
     "test:personal-code-format": "ts-node src/scripts/testNewPersonalCodeFormat.ts"
   },
   "keywords": [],

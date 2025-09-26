@@ -1,10 +1,7 @@
 import { db } from "../db";
 import { states, lgas } from "../db/schema";
 import { eq } from "drizzle-orm";
-import {
-  generateRuralAddressComponents,
-  generateCoordinateDescription,
-} from "./rural-addressing";
+import { generateRuralAddressComponents } from "./rural-addressing";
 
 // --- Area Type Enum ---
 /**
@@ -14,147 +11,6 @@ export enum AreaType {
   STREET = "STR",
   ZONE = "Z",
   LANDMARK = "LMK",
-}
-
-// --- State/LGA Lookup ---
-/**
- * Finds the state and LGA codes for a given coordinate by querying the database.
- * Note: This is a simplified implementation without true geospatial lookups.
- * In a production environment, you should use PostGIS or a similar geospatial
- * database extension for accurate point-in-polygon checks.
- *
- * @param latitude The latitude coordinate
- * @param longitude The longitude coordinate
- * @returns An object with stateCode and lgaCode, or null if not found
- */
-async function findStateLga(
-  latitude: number,
-  longitude: number
-): Promise<{ stateCode: string; lgaCode: string } | null> {
-  try {
-    // In a real implementation, this would use a geospatial query like:
-    // SELECT s.code as stateCode, l.code as lgaCode
-    // FROM states s
-    // JOIN lgas l ON s.code = l.stateCode
-    // WHERE ST_Contains(l.geometry, ST_SetSRID(ST_Point($1, $2), 4326))
-    // LIMIT 1;
-
-    // Since we don't have actual geospatial data in our current schema,
-    // we'll implement a different approach:
-
-    // 1. First, try to find the closest LGA with coordinates (if we had them in the schema)
-    // This would be ideal if we had centroid coordinates for each LGA
-
-    // 2. For now, as a temporary solution, we'll use a hardcoded mapping of coordinate
-    // ranges to known states/LGAs. This should be replaced with proper geospatial lookups.
-
-    // Nigeria coordinate boundaries (approximate)
-    const NIGERIA_LAT_MIN = 4.0; // Southernmost point
-    const NIGERIA_LAT_MAX = 14.0; // Northernmost point
-    const NIGERIA_LON_MIN = 2.5; // Westernmost point
-    const NIGERIA_LON_MAX = 15.0; // Easternmost point
-
-    // Check if coordinates are within Nigeria
-    if (
-      latitude < NIGERIA_LAT_MIN ||
-      latitude > NIGERIA_LAT_MAX ||
-      longitude < NIGERIA_LON_MIN ||
-      longitude > NIGERIA_LON_MAX
-    ) {
-      console.warn(
-        `Coordinates (${latitude}, ${longitude}) appear to be outside Nigeria`
-      );
-      return null;
-    }
-
-    // Simplified lookup based on coordinate ranges
-    // This is a temporary solution until proper geospatial data is available
-    let stateCode: string = "";
-
-    // Determine state based on latitude/longitude ranges
-    // Lagos area (approximate)
-    if (
-      latitude >= 6.3 &&
-      latitude <= 6.8 &&
-      longitude >= 3.0 &&
-      longitude <= 3.8
-    ) {
-      stateCode = "LA";
-    }
-    // FCT/Abuja area (approximate)
-    else if (
-      latitude >= 8.2 &&
-      latitude <= 9.3 &&
-      longitude >= 6.8 &&
-      longitude <= 7.6
-    ) {
-      stateCode = "FC";
-    }
-    // Kano area (approximate)
-    else if (
-      latitude >= 11.5 &&
-      latitude <= 12.2 &&
-      longitude >= 8.3 &&
-      longitude <= 9.0
-    ) {
-      stateCode = "KN";
-    }
-    // Rivers/Port Harcourt area (approximate)
-    else if (
-      latitude >= 4.7 &&
-      latitude <= 5.1 &&
-      longitude >= 6.7 &&
-      longitude <= 7.2
-    ) {
-      stateCode = "RI";
-    }
-    // If no match, use database to find the closest state
-    else {
-      // Verify the state code exists in our database
-      const allStates = await db.select().from(states);
-
-      if (allStates.length === 0) {
-        console.error("No states found in the database");
-        // Fallback to a default state (Lagos)
-        stateCode = "LA";
-      } else {
-        // Simple fallback - just use the first state in the database
-        // In a real implementation, this would use distance calculations
-        stateCode = allStates[0].code;
-      }
-    }
-
-    // Now find an LGA within that state
-    const lgaResult = await db
-      .select()
-      .from(lgas)
-      .where(eq(lgas.stateCode, stateCode))
-      .limit(1);
-
-    if (lgaResult.length === 0) {
-      console.warn(`No LGAs found for state code: ${stateCode}`);
-
-      // As a fallback, generate a synthetic LGA code
-      // In production, this should be handled differently
-      return {
-        stateCode,
-        lgaCode: "001", // Default LGA code
-      };
-    }
-
-    // Remove state prefix from LGA code if it exists
-    const lgaCode = lgaResult[0].code.startsWith(stateCode)
-      ? lgaResult[0].code.substring(stateCode.length)
-      : lgaResult[0].code;
-
-    return {
-      stateCode,
-      lgaCode,
-    };
-  } catch (error) {
-    console.error("Error looking up state/LGA:", error);
-    return null;
-  }
 }
 
 // --- Street Name to Area Code Mapping ---
@@ -270,7 +126,132 @@ const LANDMARK_AREA_MAPPING: { [key: string]: string } = {
   complex: "COM",
 };
 
-// --- Area Identifier Determination ---
+// --- State/LGA Lookup ---
+/**
+ * Finds the state and LGA codes for a given coordinate by querying the database.
+ * Note: This is a simplified implementation without true geospatial lookups.
+ * In a production environment, you should use PostGIS or a similar geospatial
+ * database extension for accurate point-in-polygon checks.
+ *
+ * @param latitude The latitude coordinate
+ * @param longitude The longitude coordinate
+ * @returns An object with stateCode and lgaCode, or null if not found
+ */
+async function findStateLga(
+  latitude: number,
+  longitude: number
+): Promise<{ stateCode: string; lgaCode: string } | null> {
+  try {
+    // Nigeria coordinate boundaries (approximate)
+    const NIGERIA_LAT_MIN = 4.0; // Southernmost point
+    const NIGERIA_LAT_MAX = 14.0; // Northernmost point
+    const NIGERIA_LON_MIN = 2.5; // Westernmost point
+    const NIGERIA_LON_MAX = 15.0; // Easternmost point
+
+    // Check if coordinates are within Nigeria
+    if (
+      latitude < NIGERIA_LAT_MIN ||
+      latitude > NIGERIA_LAT_MAX ||
+      longitude < NIGERIA_LON_MIN ||
+      longitude > NIGERIA_LON_MAX
+    ) {
+      console.warn(
+        `Coordinates (${latitude}, ${longitude}) appear to be outside Nigeria`
+      );
+      return null;
+    }
+
+    // Simplified lookup based on coordinate ranges
+    // This is a temporary solution until proper geospatial data is available
+    let stateCode: string = "";
+
+    // Determine state based on latitude/longitude ranges
+    // Lagos area (approximate)
+    if (
+      latitude >= 6.3 &&
+      latitude <= 6.8 &&
+      longitude >= 3.0 &&
+      longitude <= 3.8
+    ) {
+      stateCode = "LA";
+    }
+    // FCT/Abuja area (approximate)
+    else if (
+      latitude >= 8.2 &&
+      latitude <= 9.3 &&
+      longitude >= 6.8 &&
+      longitude <= 7.6
+    ) {
+      stateCode = "FC";
+    }
+    // Kano area (approximate)
+    else if (
+      latitude >= 11.5 &&
+      latitude <= 12.2 &&
+      longitude >= 8.3 &&
+      longitude <= 9.0
+    ) {
+      stateCode = "KN";
+    }
+    // Rivers/Port Harcourt area (approximate)
+    else if (
+      latitude >= 4.7 &&
+      latitude <= 5.1 &&
+      longitude >= 6.7 &&
+      longitude <= 7.2
+    ) {
+      stateCode = "RI";
+    }
+    // If no match, use database to find the closest state
+    else {
+      // Verify the state code exists in our database
+      const allStates = await db.select().from(states);
+
+      if (allStates.length === 0) {
+        console.error("No states found in the database");
+        // Fallback to a default state (Lagos)
+        stateCode = "LA";
+      } else {
+        // Simple fallback - just use the first state in the database
+        // In a real implementation, this would use distance calculations
+        stateCode = allStates[0].code;
+      }
+    }
+
+    // Now find an LGA within that state
+    const lgaResult = await db
+      .select()
+      .from(lgas)
+      .where(eq(lgas.stateCode, stateCode))
+      .limit(1);
+
+    if (lgaResult.length === 0) {
+      console.warn(`No LGAs found for state code: ${stateCode}`);
+
+      // As a fallback, generate a synthetic LGA code
+      // In production, this should be handled differently
+      return {
+        stateCode,
+        lgaCode: "001", // Default LGA code
+      };
+    }
+
+    // Remove state prefix from LGA code if it exists
+    const lgaCode = lgaResult[0].code.startsWith(stateCode)
+      ? lgaResult[0].code.substring(stateCode.length)
+      : lgaResult[0].code;
+
+    return {
+      stateCode,
+      lgaCode,
+    };
+  } catch (error) {
+    console.error("Error looking up state/LGA:", error);
+    return null;
+  }
+}
+
+// --- Enhanced Area Identifier Determination ---
 /**
  * Determines the area identifier based on street name, landmark, and coordinates.
  * Uses street name mapping and grid system for more meaningful codes.
@@ -334,7 +315,7 @@ async function determineAreaIdentifier(
       // Use coordinate-based zone determination
       if (latitude > 9.0) {
         areaType = AreaType.ZONE;
-        areaCode = "01";
+        areaCode = "Z01";
       } else if (latitude > 7.0) {
         areaType = AreaType.LANDMARK;
         areaCode = "LMK";
@@ -354,11 +335,9 @@ async function determineAreaIdentifier(
   }
 }
 
-// --- Generate sequential location number ---
+// --- Enhanced Location Number Generation ---
 /**
- * Returns a deterministic 4-digit location number based on coordinates.
- * This approach uses the fractional parts of the coordinates to create a
- * predictable and spatially relevant identifier.
+ * Generates a 4-digit location number based on coordinates
  */
 function getNextLocationNumber(latitude: number, longitude: number): string {
   try {
@@ -467,12 +446,8 @@ export async function generateHhgCode(
     // For zone, use Z prefix with 2 digits (e.g., Z01)
     formattedAreaCode = `${type}${code.padStart(2, "0")}`;
   } else {
-    // For STR and LMK, use the code as-is if it's 3 chars, otherwise pad to 3
-    if (code.length === 3) {
-      formattedAreaCode = code;
-    } else {
-      formattedAreaCode = code.padStart(3, "0");
-    }
+    // For STR and LMK, use full 3-char prefix and 3 chars (e.g., VIC, HOS)
+    formattedAreaCode = code.padStart(3, "0");
   }
 
   // Generate location number (coordinates-based only)
@@ -499,26 +474,20 @@ export async function generateHhgCode(
 }
 
 /**
- * Represents the data needed to update an existing address record.
- */
-export interface AddressUpdateData {
-  hhgCode: string;
-  stateCode: string;
-  lgaCode: string;
-  areaType: string;
-  areaCode: string;
-  houseNumber?: string;
-  locationNumber: string;
-}
-
-/**
  * Parses a Digital Door Code (DDC) into its component parts.
  * Simplified format: NG-XX-YY-ZZZ-HHHH-NNNN
  *
  * @param ddc The Digital Door Code to parse
  * @returns Object containing the parsed components, or null if invalid
  */
-export function parseDDC(ddc: string): AddressUpdateData | null {
+export function parseDDC(ddc: string): {
+  stateCode: string;
+  lgaCode: string;
+  areaType: string;
+  areaCode: string;
+  houseNumber?: string;
+  locationNumber: string;
+} | null {
   try {
     // Simplified regex for new format: NG-XX-YY-ZZZ-HHHH-NNNN
     const ddcRegex = /^NG-([A-Z]{2})-(\d{2})-([A-Z0-9]{3})-(\d{1,5})-(\d{4})$/;
@@ -546,7 +515,6 @@ export function parseDDC(ddc: string): AddressUpdateData | null {
     }
 
     return {
-      hhgCode: ddc,
       stateCode,
       lgaCode,
       areaType,
@@ -561,85 +529,53 @@ export function parseDDC(ddc: string): AddressUpdateData | null {
 }
 
 /**
- * Generates the necessary data fields for updating an address.
- *
- * @param latitude The latitude of the address.
- * @param longitude The longitude of the address.
- * @returns An object containing the update data, or null if generation fails.
+ * Represents the data needed to update an existing address record.
  */
-export async function generateAddressUpdateData(
-  latitude: number,
-  longitude: number
-): Promise<AddressUpdateData | null> {
-  const ddc = await generateHhgCode(latitude, longitude);
-
-  if (!ddc) {
-    return null;
-  }
-
-  return parseDDC(ddc);
+export interface AddressUpdateData {
+  hhgCode: string;
+  street?: string;
+  city?: string;
+  houseNumber?: string;
+  landmark?: string;
+  floor?: string;
+  estate?: string;
+  specialDescription?: string;
+  latitude?: number;
+  longitude?: number;
+  stateCode?: string;
+  lgaCode?: string;
+  areaType?: string;
+  areaCode?: string;
+  locationNumber?: string;
+  isSaved?: boolean;
+  label?: string;
+  category?: string;
+  photoUrls?: string[];
 }
 
 /**
- * Enhanced address generation that handles rural areas intelligently
+ * Checks if a street name needs to be generated (for rural areas)
  */
-export async function generateEnhancedAddress(
+export function needsGeneratedStreetName(streetName?: string): boolean {
+  return !streetName || streetName.trim() === "" || streetName === "N/A";
+}
+
+/**
+ * Generates a street name for rural areas based on coordinates
+ */
+export async function generateStreetName(
   latitude: number,
-  longitude: number,
-  city: string,
-  userProvidedDescription?: string,
-  isRural: boolean = false
-): Promise<{
-  hhgCode: string | null;
-  addressComponents: {
-    primary: string;
-    alternatives: string[];
-    type: string;
-    coordinates: string;
-  };
-  ruralEnhancements?: {
-    suggestedComponents: any;
-    nearbyAddresses: any[];
-  };
-}> {
-  // Generate standard DDC
-  const hhgCode = await generateHhgCode(latitude, longitude);
-
-  let addressComponents = {
-    primary: userProvidedDescription || city,
-    alternatives: [] as string[],
-    type: "standard",
-    coordinates: generateCoordinateDescription(latitude, longitude, city),
-  };
-
-  // If rural or no user description provided, enhance with rural addressing
-  if (isRural || !userProvidedDescription) {
+  longitude: number
+): Promise<string> {
+  try {
     const ruralComponents = await generateRuralAddressComponents(
       latitude,
       longitude,
-      city,
-      userProvidedDescription
+      "Unknown City"
     );
-
-    addressComponents = {
-      primary: ruralComponents.primaryAddress,
-      alternatives: ruralComponents.alternativeAddresses,
-      type: "rural_enhanced",
-      coordinates: ruralComponents.coordinateDescription,
-    };
-
-    return {
-      hhgCode,
-      addressComponents,
-      ruralEnhancements: {
-        suggestedComponents: ruralComponents.suggestedComponents,
-        nearbyAddresses: ruralComponents.nearbyAddresses,
-      },
-    };
+    return ruralComponents.primaryAddress || "Rural Area";
+  } catch (error) {
+    console.error("Error generating street name:", error);
+    return "Rural Area";
   }
-
-  return {
-    hhgCode,
-    addressComponents,
-  };
 }

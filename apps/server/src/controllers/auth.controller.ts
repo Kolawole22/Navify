@@ -338,7 +338,14 @@ export const register = async (req: Request, res: Response) => {
             stateCodeForDDC = "OY";
         }
 
-        ddc = await generateHhgCode(latitude, longitude, stateCodeForDDC);
+        ddc = await generateHhgCode(
+          latitude,
+          longitude,
+          street,
+          landmark,
+          houseNumber,
+          stateCodeForDDC
+        );
         if (ddc) {
           const ddcInfo = parseDDC(ddc);
           if (ddcInfo) {

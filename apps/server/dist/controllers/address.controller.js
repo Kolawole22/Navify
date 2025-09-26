@@ -143,7 +143,7 @@ const createAddress = async (req, res) => {
         const inputData = validationResult.data;
         // Generate the Digital Door Code (DDC) using the utility
         // Pass state and LGA codes if they're provided in the input
-        const ddc = await (0, addressing_1.generateHhgCode)(inputData.latitude, inputData.longitude, inputData.stateCode, inputData.lgaCode);
+        const ddc = await (0, addressing_1.generateHhgCode)(inputData.latitude, inputData.longitude, inputData.street, inputData.landmark, inputData.houseNumber, inputData.stateCode, inputData.lgaCode);
         if (!ddc) {
             res.status(400).json({
                 error: "Could not generate address code for the provided coordinates. Ensure location is within Nigeria.",

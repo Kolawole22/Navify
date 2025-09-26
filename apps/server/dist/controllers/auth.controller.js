@@ -267,7 +267,7 @@ const register = async (req, res) => {
                     else if (cityLower.includes("ibadan") || cityLower.includes("oyo"))
                         stateCodeForDDC = "OY";
                 }
-                ddc = await (0, addressing_1.generateHhgCode)(latitude, longitude, stateCodeForDDC);
+                ddc = await (0, addressing_1.generateHhgCode)(latitude, longitude, street, landmark, houseNumber, stateCodeForDDC);
                 if (ddc) {
                     const ddcInfo = (0, addressing_1.parseDDC)(ddc);
                     if (ddcInfo) {
@@ -343,6 +343,9 @@ const register = async (req, res) => {
                 id: result.id,
                 email: result.email,
                 firstName: result.firstName,
+                lastName: result.lastName,
+                phoneNumber: result.phoneNumber,
+                personalCode: result.personalCode,
                 // Include other needed fields
             },
             token,
@@ -442,6 +445,7 @@ const getCurrentUser = async (req, res) => {
             firstName: schema_1.users.firstName,
             lastName: schema_1.users.lastName,
             phoneNumber: schema_1.users.phoneNumber,
+            personalCode: schema_1.users.personalCode,
             createdAt: schema_1.users.createdAt,
             // isVerified: users.isVerified,
             // Add other fields as needed

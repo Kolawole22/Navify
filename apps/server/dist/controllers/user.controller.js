@@ -227,6 +227,7 @@ const getCurrentUserProfile = async (req, res) => {
             .where((0, drizzle_orm_1.eq)(schema_1.users.id, req.user.id))
             .limit(1);
         const user = userResult[0];
+        console.log("user", user);
         if (!user) {
             res.status(404).json({ error: "User not found" });
             return;
