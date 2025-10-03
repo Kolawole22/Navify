@@ -119,13 +119,15 @@ async function findStateLga(latitude, longitude) {
                 lgaCode: "001", // Default LGA code
             };
         }
-        // Remove state prefix from LGA code if it exists
-        const lgaCode = lgaResult[0].code.startsWith(stateCode)
-            ? lgaResult[0].code.substring(stateCode.length)
-            : lgaResult[0].code;
+        // Extract the numeric part from LGA code
+        // LGA codes are in format like "AB001", "AB002", etc.
+        // We need to extract just the numeric part (001, 002, etc.)
+        const fullLgaCode = lgaResult[0].code;
+        const numericPart = fullLgaCode.replace(/^[A-Z]+/, ''); // Remove all leading letters
+        console.log(`Debug: Found LGA - fullCode: "${fullLgaCode}", stateCode: "${stateCode}", extracted numeric: "${numericPart}"`);
         return {
             stateCode,
-            lgaCode,
+            lgaCode: numericPart,
         };
     }
     catch (error) {
@@ -240,6 +242,95 @@ const LANDMARK_AREA_MAPPING = {
     center: "CEN",
     complex: "COM",
 };
+// --- Street Prefix Utilities ---
+/**
+ * Normalizes a street name to a canonical base form:
+ * - Unicode normalize, remove diacritics
+ * - Lowercase, trim
+ * - Remove punctuation
+ * - Remove common type tokens (street, road, avenue, etc.)
+ * - Collapse multiple spaces
+ */
+function normalizeStreetBaseName(raw) {
+    try {
+        const TYPE_TOKENS = [
+            "street",
+            "st",
+            "road",
+            "rd",
+            "avenue",
+            "ave",
+            "close",
+            "cl",
+            "crescent",
+            "cr",
+            "lane",
+            "ln",
+            "drive",
+            "dr",
+            "way",
+            "boulevard",
+            "blvd",
+            "estate",
+            "phase",
+        ];
+        let s = raw.normalize("NFD");
+        s = s.replace(/[\u0300-\u036f]/g, "");
+        s = s.toLowerCase().trim();
+        s = s.replace(/[^a-z0-9\s]/g, " ");
+        s = s.replace(/\s+/g, " ");
+        const parts = s.split(" ").filter(Boolean);
+        const filtered = parts.filter((p) => !TYPE_TOKENS.includes(p));
+        const base = (filtered.length ? filtered : parts).join(" ");
+        return base.trim();
+    }
+    catch (_e) {
+        return raw.toLowerCase().trim();
+    }
+}
+/**
+ * Derives a 3-character code from a normalized street base name.
+ * - Prefer alphabetic characters; pad with X if fewer than 3
+ * - If reserved or empty, derive via checksum fill
+ */
+function deriveThreeLetterStreetCode(normalizedBase) {
+    const RESERVED = new Set([
+        "STR",
+        "ROA",
+        "AVE",
+        "CLO",
+        "DRI",
+        "WAY",
+        "BLV",
+        "CRE",
+        "LAN",
+        "EST",
+        "VIL",
+        "COM",
+        "PLO",
+        "BLO",
+        "LMK",
+    ]);
+    const lettersOnly = normalizedBase.replace(/[^a-z]/g, "");
+    let code = lettersOnly.slice(0, 3).toUpperCase();
+    if (code.length < 3) {
+        const alnum = normalizedBase.replace(/[^a-z0-9]/g, "");
+        code = (code + alnum.slice(0, 3 - code.length)).toUpperCase();
+    }
+    if (code.length < 3)
+        code = (code + "XXX").slice(0, 3);
+    if (RESERVED.has(code) || /^(X{3}|\s*)$/.test(code)) {
+        let sum = 0;
+        for (let i = 0; i < normalizedBase.length; i++)
+            sum += normalizedBase.charCodeAt(i);
+        const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        const a = alphabet[(sum + 0) % 26];
+        const b = alphabet[(sum + 7) % 26];
+        const c = alphabet[(sum + 13) % 26];
+        code = `${a}${b}${c}`;
+    }
+    return code;
+}
 // --- Area Identifier Determination ---
 /**
  * Determines the area identifier based on street name, landmark, and coordinates.
@@ -265,6 +356,15 @@ async function determineAreaIdentifier(latitude, streetName, landmark) {
                         areaCode = value;
                         areaType = AreaType.STREET;
                         break;
+                    }
+                }
+                // If still not matched, derive from the normalized base street name
+                if (areaCode === "001") {
+                    const base = normalizeStreetBaseName(streetName);
+                    const derived = deriveThreeLetterStreetCode(base);
+                    if (derived && derived.length === 3) {
+                        areaCode = derived;
+                        areaType = AreaType.STREET;
                     }
                 }
             }
@@ -385,10 +485,19 @@ async function generateHhgCode(latitude, longitude, streetName, landmark, houseN
     }
     // Ensure state code is 2 letters and LGA code is 2 digits
     const { stateCode: resolvedStateCode, lgaCode: resolvedLgaCode } = locationInfo;
-    // Normalize LGA code to 2 digits (remove leading zeros)
-    const normalizedLgaCode = parseInt(resolvedLgaCode, 10)
-        .toString()
-        .padStart(2, "0");
+    // Validate and normalize LGA code to 2 digits
+    let normalizedLgaCode;
+    const lgaNumber = parseInt(resolvedLgaCode, 10);
+    console.log(`Debug: resolvedLgaCode = "${resolvedLgaCode}", parsed as number = ${lgaNumber}`);
+    if (isNaN(lgaNumber) || lgaNumber < 0) {
+        console.error(`Invalid LGA code: ${resolvedLgaCode}. Expected a numeric value.`);
+        // Fallback to default LGA code
+        normalizedLgaCode = "01";
+    }
+    else {
+        normalizedLgaCode = lgaNumber.toString().padStart(2, "0");
+    }
+    console.log(`Debug: Final normalizedLgaCode = "${normalizedLgaCode}"`);
     // 2. Determine area identifier with enhanced logic
     const areaInfo = await determineAreaIdentifier(latitude, streetName, landmark);
     if (!areaInfo) {
@@ -488,9 +597,9 @@ async function generateAddressUpdateData(latitude, longitude) {
 /**
  * Enhanced address generation that handles rural areas intelligently
  */
-async function generateEnhancedAddress(latitude, longitude, city, userProvidedDescription, isRural = false) {
-    // Generate standard DDC
-    const hhgCode = await generateHhgCode(latitude, longitude);
+async function generateEnhancedAddress(latitude, longitude, city, userProvidedDescription, isRural = false, streetName, landmark, houseNumber, stateCode, lgaCode) {
+    // Generate DDC using forwarded components when available
+    const hhgCode = await generateHhgCode(latitude, longitude, streetName, landmark, houseNumber, stateCode, lgaCode);
     let addressComponents = {
         primary: userProvidedDescription || city,
         alternatives: [],

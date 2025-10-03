@@ -10,6 +10,7 @@ import {
   generateHhgCode,
   parseDDC,
   generateEnhancedAddress,
+  findStateLga,
 } from "../utils/addressing"; // Import DDC generator and parser
 import { createPersonalCode } from "../utils/personalCodeGenerator"; // Import personal code generator
 
@@ -262,6 +263,22 @@ export const register = async (req: Request, res: Response) => {
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
+    // Get the full state and LGA codes from the database
+    // This ensures we have the correct format for foreign key constraints
+    const locationInfo = await findStateLga(latitude, longitude);
+
+    if (!locationInfo) {
+      res.status(400).json({
+        error:
+          "Could not determine State/LGA for the provided coordinates. Ensure location is within Nigeria.",
+      });
+      return;
+    }
+
+    // Use the provided state/LGA codes if available, otherwise use the looked-up ones
+    const finalStateCode = clientStateCode || locationInfo.stateCode;
+    const finalLgaCode = clientLgaCode || locationInfo.lgaCode;
+
     // --- Create User and Address in a Transaction ---
     const result = await db.transaction(async (tx) => {
       // Create user
@@ -289,8 +306,6 @@ export const register = async (req: Request, res: Response) => {
       // --- Enhanced Address Generation (with rural support) ---
       let enhancedAddressInfo;
       let ddc: string | null = null;
-      let stateCode: string = "";
-      let lgaCode: string = "";
       let areaType: string = "";
       let areaCode: string = "";
       let locationNumber: string = "";
@@ -322,8 +337,9 @@ export const register = async (req: Request, res: Response) => {
         if (ddc) {
           const ddcInfo = parseDDC(ddc);
           if (ddcInfo) {
-            ({ stateCode, lgaCode, areaType, areaCode, locationNumber } =
-              ddcInfo);
+            ({ areaType, areaCode, locationNumber } = ddcInfo);
+            // Don't use parsed stateCode and lgaCode - they're normalized for DDC
+            // Use the original client-provided codes or look them up
           }
         }
       } catch (error) {
@@ -354,8 +370,9 @@ export const register = async (req: Request, res: Response) => {
         if (ddc) {
           const ddcInfo = parseDDC(ddc);
           if (ddcInfo) {
-            ({ stateCode, lgaCode, areaType, areaCode, locationNumber } =
-              ddcInfo);
+            ({ areaType, areaCode, locationNumber } = ddcInfo);
+            // Don't use parsed stateCode and lgaCode - they're normalized for DDC
+            // Use the original client-provided codes or looked-up ones
           }
         }
       }
@@ -385,8 +402,8 @@ export const register = async (req: Request, res: Response) => {
           latitude,
           longitude,
           hhgCode: ddc, // Store the full DDC as the hhgCode
-          stateCode: clientStateCode || stateCode, // Use client-provided first
-          lgaCode: clientLgaCode || lgaCode, // Use client-provided first
+          stateCode: finalStateCode, // Use the resolved state code
+          lgaCode: finalLgaCode, // Use the resolved LGA code
           areaType,
           areaCode,
           locationNumber,
@@ -411,8 +428,8 @@ export const register = async (req: Request, res: Response) => {
         {
           latitude: latitude.toString(),
           longitude: longitude.toString(),
-          stateCode: clientStateCode || stateCode,
-          lgaCode: clientLgaCode || lgaCode,
+          stateCode: finalStateCode,
+          lgaCode: finalLgaCode,
           city,
           street: noStreetAddress
             ? enhancedAddressInfo?.addressComponents?.primary || ""

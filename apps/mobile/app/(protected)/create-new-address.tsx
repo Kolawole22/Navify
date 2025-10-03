@@ -173,19 +173,21 @@ export default function CreateNewAddressScreen() {
       latitude: finalLatitude,
       longitude: finalLongitude,
       label: label.trim(),
-      state: stateCode,
-      lga: lgaCode,
+      stateCode: stateCode, // Fixed: was "state"
+      lgaCode: lgaCode, // Fixed: was "lga"
       city,
       street: noStreetAddress ? "" : street.trim(),
       houseNumber: noStreetAddress ? "" : houseNumber.trim(),
       landmark: landmark.trim() || undefined,
-      apartment: apartment.trim() || undefined,
+      floor: apartment.trim() || undefined, // Fixed: was "apartment"
       estate: estate.trim() || undefined,
       specialDescription: specialDescription.trim() || undefined,
-      photoUrls: housePhoto ? [housePhoto] : undefined, // Send as array
+      // Only send photoUrls if it's a valid URL (not a local file URI)
+      photoUrls:
+        housePhoto && housePhoto.startsWith("http") ? [housePhoto] : undefined,
       isSaved: true, // Explicitly save when creating this way
       category: category || undefined,
-      noStreetAddress,
+      // Removed noStreetAddress as it's not expected by backend
     };
 
     createAddress(payload, {
@@ -263,8 +265,8 @@ export default function CreateNewAddressScreen() {
 
   return (
     <SafeAreaContainer
-      edges={["bottom"]}
       style={{ flex: 1, backgroundColor: "#fff" }}
+      edges={["bottom", "top"]}
     >
       <Stack.Screen options={{ title: "Add New Address" }} />
       <KeyboardAwareScrollView bottomOffset={62} className="flex-1 p-6">
@@ -518,6 +520,7 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     marginTop: 24, // Add some space before the button
+    marginBottom: 36,
   },
   coordText: {
     textAlign: "center",

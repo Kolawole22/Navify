@@ -42,14 +42,14 @@ Content-Type: application/json
 Authorization: Bearer YOUR_TOKEN_HERE
 
 ### Create sample user 1 (with street)
-POST http://localhost:3000/api/auth/register
+POST http://localhost:3006/api/auth/register
 Content-Type: application/json
 
 {
-  "phoneNumber": "+2348011111111",
+  "phoneNumber": "+2348011111115",
   "firstName": "Ada",
   "lastName": "Okafor",
-  "email": "ada.okafor+rest@example.com",
+  "email": "ada.okafor+rest@example4.com",
   "password": "Password123!",
   "latitude": 6.4384,
   "longitude": 3.4236,

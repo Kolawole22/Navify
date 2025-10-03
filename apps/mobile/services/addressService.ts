@@ -42,17 +42,18 @@ interface CreateAddressPayload {
   latitude: number;
   longitude: number;
   street: string;
-  state: string;
-  lga: string;
+  stateCode: string; // Fixed: was "state"
+  lgaCode: string; // Fixed: was "lga"
   city: string;
   houseNumber?: string;
   landmark?: string;
-  apartment?: string; // Maps to 'floor'
+  floor?: string; // Fixed: was "apartment"
   estate?: string;
   specialDescription?: string;
   photoUrls?: string[];
   isSaved?: boolean;
   label?: string;
+  category?: string; // Added missing category field
 }
 
 // --- API Call Functions ---
@@ -74,15 +75,11 @@ const fetchAddressByIdApi = async (id: string): Promise<Address> => {
 const createAddressApi = async (
   payload: CreateAddressPayload
 ): Promise<Address> => {
-  // Convert lat/lon to string if backend expects it due to decimal type
+  // Backend expects latitude and longitude as numbers
   const backendPayload = {
     ...payload,
-    latitude: payload.latitude.toString(),
-    longitude: payload.longitude.toString(),
-    floor: payload.apartment, // Map apartment to floor
+    // latitude and longitude are already numbers, no conversion needed
   };
-  // Remove apartment if it exists, as we mapped it to floor
-  delete (backendPayload as any).apartment;
 
   // Assuming the backend returns the newly created Address object
   const { data } = await axiosInstance.post<Address>(

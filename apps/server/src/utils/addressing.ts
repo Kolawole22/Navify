@@ -27,7 +27,7 @@ export enum AreaType {
  * @param longitude The longitude coordinate
  * @returns An object with stateCode and lgaCode, or null if not found
  */
-async function findStateLga(
+export async function findStateLga(
   latitude: number,
   longitude: number
 ): Promise<{ stateCode: string; lgaCode: string } | null> {
@@ -142,14 +142,13 @@ async function findStateLga(
       };
     }
 
-    // Remove state prefix from LGA code if it exists
-    const lgaCode = lgaResult[0].code.startsWith(stateCode)
-      ? lgaResult[0].code.substring(stateCode.length)
-      : lgaResult[0].code;
+    // Return the full LGA code as stored in the database
+    // LGA codes are stored as full codes like "LA007", "AB001", etc.
+    const fullLgaCode = lgaResult[0].code;
 
     return {
       stateCode,
-      lgaCode,
+      lgaCode: fullLgaCode, // Return the full LGA code, not just the numeric part
     };
   } catch (error) {
     console.error("Error looking up state/LGA:", error);
@@ -378,34 +377,76 @@ async function determineAreaIdentifier(
     let areaCode = "001"; // Default fallback
     let areaType = AreaType.STREET; // Default type
 
+    console.log("🔍 determineAreaIdentifier called with:", {
+      latitude,
+      streetName,
+      landmark,
+    });
+
     // 1. Try to determine area from street name first
     if (streetName && streetName.trim()) {
       const normalizedStreet = streetName.toLowerCase().trim();
+      console.log("📍 Processing street name:", {
+        original: streetName,
+        normalized: normalizedStreet,
+      });
 
       // Check for exact matches first
       if (STREET_AREA_MAPPING[normalizedStreet]) {
         areaCode = STREET_AREA_MAPPING[normalizedStreet];
         areaType = AreaType.STREET;
+        console.log("✅ Found exact match:", areaCode);
       } else {
-        // Check for partial matches
-        for (const [key, value] of Object.entries(STREET_AREA_MAPPING)) {
-          if (
-            normalizedStreet.includes(key) ||
-            key.includes(normalizedStreet)
-          ) {
-            areaCode = value;
-            areaType = AreaType.STREET;
-            break;
+        console.log("❌ No exact match found, trying derivation first...");
+        // Try derivation first for more meaningful codes
+        const base = normalizeStreetBaseName(streetName);
+        const derived = deriveThreeLetterStreetCode(base);
+        console.log("🔧 Deriving from street name:", {
+          original: streetName,
+          base,
+          derived,
+        });
+
+        if (derived && derived.length === 3) {
+          areaCode = derived;
+          areaType = AreaType.STREET;
+          console.log("✅ Using derived code:", areaCode);
+        } else {
+          console.log("❌ Derivation failed, checking partial matches...");
+          // Fallback to partial matches if derivation fails
+          // Skip generic terms like "street", "road", "avenue" to avoid false matches
+          const genericTerms = [
+            "street",
+            "road",
+            "avenue",
+            "close",
+            "drive",
+            "way",
+            "boulevard",
+            "crescent",
+            "lane",
+            "estate",
+            "village",
+            "compound",
+            "plot",
+            "block",
+          ];
+
+          for (const [key, value] of Object.entries(STREET_AREA_MAPPING)) {
+            // Skip generic terms to avoid false matches
+            if (genericTerms.includes(key)) continue;
+
+            if (
+              normalizedStreet.includes(key) ||
+              key.includes(normalizedStreet)
+            ) {
+              areaCode = value;
+              areaType = AreaType.STREET;
+              console.log("✅ Found partial match:", { key, value, areaCode });
+              break;
+            }
           }
-        }
-        // If still not matched, derive from the normalized base street name
-        if (areaCode === "001") {
-          const base = normalizeStreetBaseName(streetName);
-          const derived = deriveThreeLetterStreetCode(base);
-          if (derived && derived.length === 3) {
-            areaCode = derived;
-            areaType = AreaType.STREET;
-          }
+          console.log("🔍 After partial matching, areaCode:", areaCode);
         }
       }
     }
@@ -447,10 +488,13 @@ async function determineAreaIdentifier(
       }
     }
 
-    return {
+    const result = {
       type: areaType,
       code: areaCode,
     };
+
+    console.log("🎯 Final area identifier result:", result);
+    return result;
   } catch (error) {
     console.error("Error determining area identifier:", error);
     return null;
@@ -544,10 +588,25 @@ export async function generateHhgCode(
   // Ensure state code is 2 letters and LGA code is 2 digits
   const { stateCode: resolvedStateCode, lgaCode: resolvedLgaCode } =
     locationInfo;
-  // Normalize LGA code to 2 digits (remove leading zeros)
-  const normalizedLgaCode = parseInt(resolvedLgaCode, 10)
-    .toString()
-    .padStart(2, "0");
+
+  // Extract numeric part from LGA code for DDC generation
+  // LGA codes are stored as full codes like "LA007", "AB001", etc.
+  // For DDC generation, we need just the numeric part (007, 001, etc.)
+  let normalizedLgaCode: string;
+
+  // Extract numeric part from the LGA code
+  const numericPart = resolvedLgaCode.replace(/^[A-Z]+/, ""); // Remove all leading letters
+  const lgaNumber = parseInt(numericPart, 10);
+
+  if (isNaN(lgaNumber) || lgaNumber < 0) {
+    console.error(
+      `Invalid LGA code: ${resolvedLgaCode}. Could not extract numeric part.`
+    );
+    // Fallback to default LGA code
+    normalizedLgaCode = "01";
+  } else {
+    normalizedLgaCode = lgaNumber.toString().padStart(2, "0");
+  }
 
   // 2. Determine area identifier with enhanced logic
   const areaInfo = await determineAreaIdentifier(

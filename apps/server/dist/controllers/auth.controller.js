@@ -241,8 +241,8 @@ const register = async (req, res) => {
                     userDescription += (userDescription ? ", " : "") + specialDescription;
                 }
                 // Use enhanced address generation for rural areas
-                enhancedAddressInfo = await (0, addressing_1.generateEnhancedAddress)(latitude, longitude, city, userDescription || undefined, noStreetAddress // Treat no street address as potentially rural
-                );
+                enhancedAddressInfo = await (0, addressing_1.generateEnhancedAddress)(latitude, longitude, city, userDescription || undefined, noStreetAddress, // Treat no street address as potentially rural
+                street, landmark, houseNumber, clientStateCode, clientLgaCode);
                 ddc = enhancedAddressInfo.hhgCode;
                 if (ddc) {
                     const ddcInfo = (0, addressing_1.parseDDC)(ddc);

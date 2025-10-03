@@ -3,7 +3,7 @@ import { db } from "../db"; // Import Drizzle db instance
 import { addresses, addressBookmarks } from "../db/schema"; // Import Drizzle schemas
 import { eq, and, or, ilike, SQL } from "drizzle-orm"; // Import operators and SQL type
 import { z } from "zod";
-import { generateHhgCode, parseDDC } from "../utils/addressing"; // Import the DDC code generator and utilities
+import { generateHhgCode, parseDDC, findStateLga } from "../utils/addressing"; // Import the DDC code generator and utilities
 import {
   generateLocationDescription,
   needsGeneratedStreetName,
@@ -166,6 +166,25 @@ export const createAddress = async (req: Request, res: Response) => {
 
     const inputData = validationResult.data;
 
+    // Get the full state and LGA codes from the database
+    // This ensures we have the correct format for foreign key constraints
+    const locationInfo = await findStateLga(
+      inputData.latitude,
+      inputData.longitude
+    );
+
+    if (!locationInfo) {
+      res.status(400).json({
+        error:
+          "Could not determine State/LGA for the provided coordinates. Ensure location is within Nigeria.",
+      });
+      return;
+    }
+
+    // Use the provided state/LGA codes if available, otherwise use the looked-up ones
+    const finalStateCode = inputData.stateCode || locationInfo.stateCode;
+    const finalLgaCode = inputData.lgaCode || locationInfo.lgaCode;
+
     // Generate the Digital Door Code (DDC) using the utility
     // Pass state and LGA codes if they're provided in the input
     const ddc = await generateHhgCode(
@@ -174,8 +193,8 @@ export const createAddress = async (req: Request, res: Response) => {
       inputData.street,
       inputData.landmark,
       inputData.houseNumber,
-      inputData.stateCode,
-      inputData.lgaCode
+      finalStateCode,
+      finalLgaCode
     );
 
     if (!ddc) {
@@ -196,7 +215,11 @@ export const createAddress = async (req: Request, res: Response) => {
       return;
     }
 
-    const { stateCode, lgaCode, areaType, areaCode, locationNumber } = ddcInfo;
+    const { areaType, areaCode, locationNumber } = ddcInfo;
+
+    // Use the full state and LGA codes for database storage
+    const stateCode = finalStateCode;
+    const lgaCode = finalLgaCode;
 
     // Prepare data for insertion using the correct schema fields
 

@@ -28,7 +28,7 @@ export default function MyAddressesScreen() {
   );
 
   const handleAddAddress = () => {
-    router.push("/(protected)/create-address");
+    router.push("/(protected)/create-new-address");
   };
 
   const handleAddressPress = (address: Address) => {
