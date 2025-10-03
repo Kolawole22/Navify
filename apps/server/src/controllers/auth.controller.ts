@@ -309,7 +309,12 @@ export const register = async (req: Request, res: Response) => {
           longitude,
           city,
           userDescription || undefined,
-          noStreetAddress // Treat no street address as potentially rural
+          noStreetAddress, // Treat no street address as potentially rural
+          street,
+          landmark,
+          houseNumber,
+          clientStateCode,
+          clientLgaCode
         );
 
         ddc = enhancedAddressInfo.hhgCode;
