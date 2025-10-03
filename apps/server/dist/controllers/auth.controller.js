@@ -12,6 +12,7 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const zod_1 = require("zod"); // Add Zod import
 // z import will be used when implementing Zod validation
 const addressing_1 = require("../utils/addressing"); // Import DDC generator and parser
+const personalCodeGenerator_1 = require("../utils/personalCodeGenerator"); // Import personal code generator
 // --- Zod Schemas ---
 // OTP request schema
 const otpRequestSchema = zod_1.z.object({
@@ -217,6 +218,8 @@ const register = async (req, res) => {
                 id: schema_1.users.id,
                 email: schema_1.users.email,
                 firstName: schema_1.users.firstName,
+                lastName: schema_1.users.lastName,
+                phoneNumber: schema_1.users.phoneNumber,
             });
             const newUser = newUserResult[0];
             if (!newUser)
@@ -238,8 +241,8 @@ const register = async (req, res) => {
                     userDescription += (userDescription ? ", " : "") + specialDescription;
                 }
                 // Use enhanced address generation for rural areas
-                enhancedAddressInfo = await (0, addressing_1.generateEnhancedAddress)(latitude, longitude, city, userDescription || undefined, noStreetAddress // Treat no street address as potentially rural
-                );
+                enhancedAddressInfo = await (0, addressing_1.generateEnhancedAddress)(latitude, longitude, city, userDescription || undefined, noStreetAddress, // Treat no street address as potentially rural
+                street, landmark, houseNumber, clientStateCode, clientLgaCode);
                 ddc = enhancedAddressInfo.hhgCode;
                 if (ddc) {
                     const ddcInfo = (0, addressing_1.parseDDC)(ddc);
@@ -264,7 +267,7 @@ const register = async (req, res) => {
                     else if (cityLower.includes("ibadan") || cityLower.includes("oyo"))
                         stateCodeForDDC = "OY";
                 }
-                ddc = await (0, addressing_1.generateHhgCode)(latitude, longitude, stateCodeForDDC);
+                ddc = await (0, addressing_1.generateHhgCode)(latitude, longitude, street, landmark, houseNumber, stateCodeForDDC);
                 if (ddc) {
                     const ddcInfo = (0, addressing_1.parseDDC)(ddc);
                     if (ddcInfo) {
@@ -307,7 +310,30 @@ const register = async (req, res) => {
                 .returning();
             if (newAddressResult.length === 0)
                 throw new Error("Failed to create address record");
-            return newUser; // Return the created user data
+            // Generate personal code for the user
+            const personalCode = (0, personalCodeGenerator_1.createPersonalCode)({
+                id: newUser.id,
+                firstName: newUser.firstName,
+                lastName: newUser.lastName,
+                email: newUser.email,
+                phoneNumber: newUser.phoneNumber,
+            }, {
+                latitude: latitude.toString(),
+                longitude: longitude.toString(),
+                stateCode: clientStateCode || stateCode,
+                lgaCode: clientLgaCode || lgaCode,
+                city,
+                street: noStreetAddress
+                    ? enhancedAddressInfo?.addressComponents?.primary || ""
+                    : street,
+                houseNumber: noStreetAddress ? "" : houseNumber,
+            });
+            // Update user with personal code
+            await tx
+                .update(schema_1.users)
+                .set({ personalCode })
+                .where((0, drizzle_orm_1.eq)(schema_1.users.id, newUser.id));
+            return { ...newUser, personalCode }; // Return the created user data with personal code
         });
         // Generate JWT
         const token = generateToken(result.id, result.email);
@@ -317,6 +343,9 @@ const register = async (req, res) => {
                 id: result.id,
                 email: result.email,
                 firstName: result.firstName,
+                lastName: result.lastName,
+                phoneNumber: result.phoneNumber,
+                personalCode: result.personalCode,
                 // Include other needed fields
             },
             token,
@@ -416,6 +445,7 @@ const getCurrentUser = async (req, res) => {
             firstName: schema_1.users.firstName,
             lastName: schema_1.users.lastName,
             phoneNumber: schema_1.users.phoneNumber,
+            personalCode: schema_1.users.personalCode,
             createdAt: schema_1.users.createdAt,
             // isVerified: users.isVerified,
             // Add other fields as needed

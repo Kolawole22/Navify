@@ -4,6 +4,8 @@ import helmet from "helmet";
 import morgan from "morgan";
 import dotenv from "dotenv";
 import path from "path";
+import { createServer } from "http";
+import WebSocketService from "./services/websocket.service";
 
 // Import routes
 import addressRoutes from "./routes/address.routes"; // Corrected filename
@@ -15,6 +17,7 @@ import locationHistoryRoutes from "./routes/location-history.routes"; // Import 
 import notificationsRoutes from "./routes/notifications.routes"; // Import notifications routes
 import addressSharingRoutes from "./routes/address-sharing.routes"; // Import address sharing routes
 import qrCodeRoutes from "./routes/qr-code.routes"; // Import QR code routes
+import liveLocationRoutes from "./routes/liveLocation.routes"; // Import live location routes
 // import authRoutes from "./routes/authRoutes"; // Keep commented until created
 
 // Load environment variables
@@ -23,6 +26,9 @@ dotenv.config();
 // Create Express app
 const app = express();
 const PORT = process.env.PORT || 5001;
+
+// Create HTTP server
+const server = createServer(app);
 
 // Middleware
 app.use(helmet()); // Security headers
@@ -47,6 +53,7 @@ app.use("/api/location-history", locationHistoryRoutes); // Mount location histo
 app.use("/api/notifications", notificationsRoutes); // Mount notifications routes
 app.use("/api/address-sharing", addressSharingRoutes); // Mount address sharing routes
 app.use("/api/qr-code", qrCodeRoutes); // Mount QR code routes
+app.use("/api/live-location", liveLocationRoutes); // Mount live location routes
 // app.use("/api/auth", authRoutes); // Keep commented
 
 // Health check endpoint
@@ -68,13 +75,17 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   });
 });
 
+// Initialize WebSocket service
+WebSocketService.getInstance(server);
+
 // Start server
-const server = app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(
     `🚀 Server running in ${
       process.env.NODE_ENV || "development"
     } mode on port ${PORT}`
   );
+  console.log(`🔌 WebSocket server initialized`);
 });
 
 // Graceful shutdown

@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const user_controller_1 = require("../controllers/user.controller");
+const address_controller_1 = require("../controllers/address.controller");
 const wrapAsync_1 = __importDefault(require("../utils/wrapAsync"));
 const auth_middleware_1 = require("../middleware/auth.middleware");
 const router = (0, express_1.Router)();
@@ -20,6 +21,8 @@ router.get("/me/profile", auth_middleware_1.protect, (0, wrapAsync_1.default)(us
 // User preferences endpoints
 router.get("/me/preferences", auth_middleware_1.protect, (0, wrapAsync_1.default)(user_controller_1.getPreferences));
 router.patch("/me/preferences", auth_middleware_1.protect, (0, wrapAsync_1.default)(user_controller_1.updatePreferences));
+// Bookmarks endpoint
+router.get("/me/bookmarks", auth_middleware_1.protect, (0, wrapAsync_1.default)(address_controller_1.getBookmarkedAddresses));
 // Note: User creation is typically handled via an authentication route (e.g., /api/auth/register)
 exports.default = router;
 //# sourceMappingURL=user.routes.js.map

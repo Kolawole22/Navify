@@ -2,6 +2,63 @@
 GET http://localhost:3000/api/locations/states
 Content-Type: application/json
 
+### Create sample user 1 (with street)
+POST http://localhost:3006/api/auth/register
+Content-Type: application/json
+
+{
+  "phoneNumber": "+2348011111113",
+  "firstName": "Ada",
+  "lastName": "Okafor",
+  "email": "ada.okafor+rest2@example.com",
+  "password": "Password123!",
+  "latitude": 6.4384,
+  "longitude": 3.4236,
+  "city": "Lagos",
+  "street": "Adeola Odeku Street",
+  "houseNumber": "12",
+  "landmark": "Near Eko Hotel",
+  "noStreetAddress": false,
+  "stateCode": "LA",
+  "lgaCode": "03"
+}
+
+### Create sample user 2 (no street; rural/landmark-only)
+POST http://localhost:3000/api/auth/register
+Content-Type: application/json
+
+{
+  "phoneNumber": "+2348022222222",
+  "firstName": "Tunde",
+  "lastName": "Balogun",
+  "email": "tunde.balogun+rest@example.com",
+  "password": "Password123!",
+  "latitude": 9.0723,
+  "longitude": 7.4910,
+  "city": "Abuja",
+  "noStreetAddress": true,
+  "landmark": "Community Health Center"
+}
+
+### Create sample user 3 (with street)
+POST http://localhost:3000/api/auth/register
+Content-Type: application/json
+
+{
+  "phoneNumber": "+2348033333333",
+  "firstName": "Amina",
+  "lastName": "Saidu",
+  "email": "amina.saidu+rest@example.com",
+  "password": "Password123!",
+  "latitude": 12.0006,
+  "longitude": 8.5167,
+  "city": "Kano",
+  "street": "Airport Road",
+  "houseNumber": "7A",
+  "landmark": "Near Roundabout",
+  "noStreetAddress": false
+}
+
 ### Get LGAs for a specific state by state code
 GET http://localhost:3000/api/locations/states/LA/lgas
 Content-Type: application/json
@@ -40,3 +97,4 @@ Authorization: Bearer YOUR_TOKEN_HERE
 GET http://localhost:3000/api/addresses
 Content-Type: application/json
 Authorization: Bearer YOUR_TOKEN_HERE
+

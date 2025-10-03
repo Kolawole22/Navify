@@ -218,6 +218,7 @@ const getCurrentUserProfile = async (req, res) => {
             firstName: schema_1.users.firstName,
             lastName: schema_1.users.lastName,
             phoneNumber: schema_1.users.phoneNumber,
+            personalCode: schema_1.users.personalCode,
             preferences: schema_1.users.preferences,
             createdAt: schema_1.users.createdAt,
             updatedAt: schema_1.users.updatedAt,
@@ -226,6 +227,7 @@ const getCurrentUserProfile = async (req, res) => {
             .where((0, drizzle_orm_1.eq)(schema_1.users.id, req.user.id))
             .limit(1);
         const user = userResult[0];
+        console.log("user", user);
         if (!user) {
             res.status(404).json({ error: "User not found" });
             return;

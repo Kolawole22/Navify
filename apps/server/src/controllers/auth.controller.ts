@@ -11,6 +11,7 @@ import {
   parseDDC,
   generateEnhancedAddress,
 } from "../utils/addressing"; // Import DDC generator and parser
+import { createPersonalCode } from "../utils/personalCodeGenerator"; // Import personal code generator
 
 // --- Zod Schemas ---
 
@@ -278,6 +279,8 @@ export const register = async (req: Request, res: Response) => {
           id: users.id,
           email: users.email,
           firstName: users.firstName,
+          lastName: users.lastName,
+          phoneNumber: users.phoneNumber,
         });
 
       const newUser = newUserResult[0];
@@ -306,7 +309,12 @@ export const register = async (req: Request, res: Response) => {
           longitude,
           city,
           userDescription || undefined,
-          noStreetAddress // Treat no street address as potentially rural
+          noStreetAddress, // Treat no street address as potentially rural
+          street,
+          landmark,
+          houseNumber,
+          clientStateCode,
+          clientLgaCode
         );
 
         ddc = enhancedAddressInfo.hhgCode;
@@ -335,7 +343,14 @@ export const register = async (req: Request, res: Response) => {
             stateCodeForDDC = "OY";
         }
 
-        ddc = await generateHhgCode(latitude, longitude, stateCodeForDDC);
+        ddc = await generateHhgCode(
+          latitude,
+          longitude,
+          street,
+          landmark,
+          houseNumber,
+          stateCodeForDDC
+        );
         if (ddc) {
           const ddcInfo = parseDDC(ddc);
           if (ddcInfo) {
@@ -384,7 +399,35 @@ export const register = async (req: Request, res: Response) => {
       if (newAddressResult.length === 0)
         throw new Error("Failed to create address record");
 
-      return newUser; // Return the created user data
+      // Generate personal code for the user
+      const personalCode = createPersonalCode(
+        {
+          id: newUser.id,
+          firstName: newUser.firstName,
+          lastName: newUser.lastName,
+          email: newUser.email,
+          phoneNumber: newUser.phoneNumber,
+        },
+        {
+          latitude: latitude.toString(),
+          longitude: longitude.toString(),
+          stateCode: clientStateCode || stateCode,
+          lgaCode: clientLgaCode || lgaCode,
+          city,
+          street: noStreetAddress
+            ? enhancedAddressInfo?.addressComponents?.primary || ""
+            : street,
+          houseNumber: noStreetAddress ? "" : houseNumber,
+        }
+      );
+
+      // Update user with personal code
+      await tx
+        .update(users)
+        .set({ personalCode })
+        .where(eq(users.id, newUser.id));
+
+      return { ...newUser, personalCode }; // Return the created user data with personal code
     });
 
     // Generate JWT
@@ -396,6 +439,9 @@ export const register = async (req: Request, res: Response) => {
         id: result.id,
         email: result.email,
         firstName: result.firstName,
+        lastName: result.lastName,
+        phoneNumber: result.phoneNumber,
+        personalCode: result.personalCode,
         // Include other needed fields
       },
       token,
@@ -507,6 +553,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
         firstName: users.firstName,
         lastName: users.lastName,
         phoneNumber: users.phoneNumber,
+        personalCode: users.personalCode,
         createdAt: users.createdAt,
         // isVerified: users.isVerified,
         // Add other fields as needed

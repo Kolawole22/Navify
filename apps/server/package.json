@@ -19,7 +19,19 @@
     "test:address": "ts-node src/tests/test-address-creation.ts",
     "test:address:manual": "ts-node src/tests/manual-address-test.ts",
     "test:rural": "ts-node src/tests/test-rural-addressing.ts",
-    "generate:qr-codes": "ts-node src/scripts/generate-qr-codes-for-existing-addresses.ts"
+    "generate:qr-codes": "ts-node src/scripts/generate-qr-codes-for-existing-addresses.ts",
+    "generate:personal-codes": "ts-node src/scripts/generatePersonalCodes.ts",
+    "update:personal-codes": "ts-node src/scripts/updatePersonalCodesToNewFormat.ts",
+    "update:personal-codes-8digit": "ts-node src/scripts/updatePersonalCodesToEightDigitFormat.ts",
+    "verify:personal-codes": "ts-node src/scripts/verifyPersonalCodeUpdate.ts",
+    "verify:personal-codes-8digit": "ts-node src/scripts/verifyEightDigitPersonalCodes.ts",
+    "pc:check": "ts-node src/scripts/verifyEightDigitPersonalCodes.ts",
+    "pc:backfill": "ts-node src/scripts/generatePersonalCodes.ts",
+    "pc:auto": "ts-node src/scripts/checkAndBackfillPersonalCodes.ts",
+    "migrate:simplified-format": "ts-node src/scripts/update-addresses-to-simplified-format.ts",
+    "analyze:address-formats": "ts-node src/scripts/rollback-simplified-format.ts",
+    "fix:house-numbers": "ts-node src/scripts/force-update-house-numbers.ts",
+    "test:personal-code-format": "ts-node src/scripts/testNewPersonalCodeFormat.ts"
   },
   "keywords": [],
   "author": "",
@@ -30,6 +42,7 @@
     "@types/helmet": "^4.0.0",
     "@types/morgan": "^1.9.9",
     "@types/qrcode": "^1.5.5",
+    "@types/socket.io": "^3.0.2",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
@@ -41,6 +54,7 @@
     "ngeohash": "^0.6.3",
     "pg": "^8.15.6",
     "qrcode": "^1.5.4",
+    "socket.io": "^4.8.1",
     "zod": "^3.24.3"
   },
   "devDependencies": {

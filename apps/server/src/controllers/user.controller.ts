@@ -238,6 +238,7 @@ export const getCurrentUserProfile = async (req: Request, res: Response) => {
         firstName: users.firstName,
         lastName: users.lastName,
         phoneNumber: users.phoneNumber,
+        personalCode: users.personalCode,
         preferences: users.preferences,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
@@ -247,6 +248,7 @@ export const getCurrentUserProfile = async (req: Request, res: Response) => {
       .limit(1);
 
     const user = userResult[0];
+    console.log("user", user);
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;

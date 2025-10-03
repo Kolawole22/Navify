@@ -133,73 +133,337 @@ async function findStateLga(latitude, longitude) {
         return null;
     }
 }
+// --- Street Name to Area Code Mapping ---
+/**
+ * Maps common street names and areas to standardized 3-character codes
+ * This provides meaningful area identifiers instead of sequential numbers
+ */
+const STREET_AREA_MAPPING = {
+    // Lagos Areas
+    "victoria island": "VIC",
+    vi: "VIC",
+    ikoyi: "IKO",
+    lekki: "LEK",
+    ajah: "AJA",
+    surulere: "SUR",
+    yaba: "YAB",
+    ikeja: "IKE",
+    oshodi: "OSH",
+    mushin: "MUS",
+    agege: "AGE",
+    alaba: "ALA",
+    apapa: "APA",
+    badagry: "BAD",
+    epe: "EPE",
+    ibadan: "IBA",
+    "oshodi-isolo": "OSH",
+    somolu: "SOM",
+    mainland: "MAI",
+    island: "ISL",
+    // Abuja Areas
+    asokoro: "ASO",
+    maitama: "MAI",
+    wuse: "WUS",
+    garki: "GAR",
+    gwarinpa: "GWA",
+    kubwa: "KUB",
+    lugu: "LUG",
+    jabi: "JAB",
+    utako: "UTA",
+    "central business district": "CBD",
+    cbd: "CBD",
+    // Kano Areas
+    nassarawa: "NAS",
+    fagge: "FAG",
+    dala: "DAL",
+    tarauni: "TAR",
+    kumbotso: "KUM",
+    ungogo: "UNG",
+    gwale: "GWA",
+    "kano municipal": "KAN",
+    // Port Harcourt Areas
+    "g.r.a": "GRA",
+    gra: "GRA",
+    diobu: "DIO",
+    woji: "WOJ",
+    rumuokoro: "RUM",
+    rumuola: "RUM",
+    rumuomasi: "RUM",
+    "trans-amadi": "TRA",
+    "old g.r.a": "GRA",
+    // Generic patterns
+    street: "STR",
+    road: "ROA",
+    avenue: "AVE",
+    close: "CLO",
+    drive: "DRI",
+    way: "WAY",
+    boulevard: "BLV",
+    crescent: "CRE",
+    lane: "LAN",
+    estate: "EST",
+    village: "VIL",
+    compound: "COM",
+    plot: "PLO",
+    block: "BLO",
+};
+/**
+ * Landmark-based area mapping for areas without street names
+ */
+const LANDMARK_AREA_MAPPING = {
+    hospital: "HOS",
+    school: "SCH",
+    church: "CHU",
+    mosque: "MOS",
+    market: "MAR",
+    bank: "BAN",
+    hotel: "HOT",
+    restaurant: "RES",
+    shopping: "SHO",
+    mall: "MAL",
+    university: "UNI",
+    college: "COL",
+    airport: "AIR",
+    station: "STA",
+    terminal: "TER",
+    park: "PAR",
+    garden: "GAR",
+    stadium: "STA",
+    theater: "THE",
+    cinema: "CIN",
+    pharmacy: "PHA",
+    clinic: "CLI",
+    office: "OFF",
+    building: "BUI",
+    tower: "TOW",
+    plaza: "PLA",
+    center: "CEN",
+    complex: "COM",
+};
+// --- Street Prefix Utilities ---
+/**
+ * Normalizes a street name to a canonical base form:
+ * - Unicode normalize, remove diacritics
+ * - Lowercase, trim
+ * - Remove punctuation
+ * - Remove common type tokens (street, road, avenue, etc.)
+ * - Collapse multiple spaces
+ */
+function normalizeStreetBaseName(raw) {
+    try {
+        const TYPE_TOKENS = [
+            "street",
+            "st",
+            "road",
+            "rd",
+            "avenue",
+            "ave",
+            "close",
+            "cl",
+            "crescent",
+            "cr",
+            "lane",
+            "ln",
+            "drive",
+            "dr",
+            "way",
+            "boulevard",
+            "blvd",
+            "estate",
+            "estate",
+            "phase",
+            "phas",
+            "phase",
+        ];
+        let s = raw.normalize("NFD");
+        s = s.replace(/[\u0300-\u036f]/g, ""); // strip diacritics
+        s = s.toLowerCase().trim();
+        s = s.replace(/[^a-z0-9\s]/g, " "); // punctuation to space
+        s = s.replace(/\s+/g, " ");
+        const parts = s.split(" ").filter(Boolean);
+        const filtered = parts.filter((p) => !TYPE_TOKENS.includes(p));
+        const base = (filtered.length ? filtered : parts).join(" ");
+        return base.trim();
+    }
+    catch (_e) {
+        return raw.toLowerCase().trim();
+    }
+}
+/**
+ * Derives a 3-character code from a normalized street base name.
+ * - Prefer alphabetic characters; pad with X if fewer than 3
+ * - If result collides with reserved tokens or is empty, derive using a checksum fill
+ */
+function deriveThreeLetterStreetCode(normalizedBase) {
+    const RESERVED = new Set([
+        "STR",
+        "ROA",
+        "AVE",
+        "CLO",
+        "DRI",
+        "WAY",
+        "BLV",
+        "CRE",
+        "LAN",
+        "EST",
+        "VIL",
+        "COM",
+        "PLO",
+        "BLO",
+        "LMK",
+    ]);
+    const lettersOnly = normalizedBase.replace(/[^a-z]/g, "");
+    let code = lettersOnly.slice(0, 3).toUpperCase();
+    if (code.length < 3) {
+        // Use alphanumerics if letters are insufficient
+        const alnum = normalizedBase.replace(/[^a-z0-9]/g, "");
+        code = (code + alnum.slice(0, 3 - code.length)).toUpperCase();
+    }
+    if (code.length < 3)
+        code = (code + "XXX").slice(0, 3);
+    // If reserved or empty-ish, fill using checksum characters from the name
+    if (RESERVED.has(code) || /^(X{3}|\s*)$/.test(code)) {
+        let sum = 0;
+        for (let i = 0; i < normalizedBase.length; i++)
+            sum += normalizedBase.charCodeAt(i);
+        const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        const a = alphabet[(sum + 0) % 26];
+        const b = alphabet[(sum + 7) % 26];
+        const c = alphabet[(sum + 13) % 26];
+        code = `${a}${b}${c}`;
+    }
+    return code;
+}
 // --- Area Identifier Determination ---
 /**
- * Determines the area identifier based on latitude, longitude.
- * This is a placeholder implementation - replace with actual logic.
+ * Determines the area identifier based on street name, landmark, and coordinates.
+ * Uses street name mapping and grid system for more meaningful codes.
  */
-async function determineAreaIdentifier(latitude, _longitude) {
-    // Placeholder implementation - replace with actual logic
-    console.warn("Using placeholder area identifier logic. Implement actual system!");
-    // Simple placeholder that assigns zone based on latitude
-    if (latitude > 9.0) {
-        return { type: AreaType.ZONE, code: "001" };
+async function determineAreaIdentifier(latitude, streetName, landmark) {
+    try {
+        let areaCode = "001"; // Default fallback
+        let areaType = AreaType.STREET; // Default type
+        // 1. Try to determine area from street name first
+        if (streetName && streetName.trim()) {
+            const normalizedStreet = streetName.toLowerCase().trim();
+            // Check for exact matches first
+            if (STREET_AREA_MAPPING[normalizedStreet]) {
+                areaCode = STREET_AREA_MAPPING[normalizedStreet];
+                areaType = AreaType.STREET;
+            }
+            else {
+                // Check for partial matches
+                for (const [key, value] of Object.entries(STREET_AREA_MAPPING)) {
+                    if (normalizedStreet.includes(key) ||
+                        key.includes(normalizedStreet)) {
+                        areaCode = value;
+                        areaType = AreaType.STREET;
+                        break;
+                    }
+                }
+                // If still not matched, derive from the normalized base street name
+                if (areaCode === "001") {
+                    const base = normalizeStreetBaseName(streetName);
+                    const derived = deriveThreeLetterStreetCode(base);
+                    if (derived && derived.length === 3) {
+                        areaCode = derived;
+                        areaType = AreaType.STREET;
+                    }
+                }
+            }
+        }
+        // 2. If no street match, try landmark
+        if (areaCode === "001" && landmark && landmark.trim()) {
+            const normalizedLandmark = landmark.toLowerCase().trim();
+            if (LANDMARK_AREA_MAPPING[normalizedLandmark]) {
+                areaCode = LANDMARK_AREA_MAPPING[normalizedLandmark];
+                areaType = AreaType.LANDMARK;
+            }
+            else {
+                // Check for partial matches
+                for (const [key, value] of Object.entries(LANDMARK_AREA_MAPPING)) {
+                    if (normalizedLandmark.includes(key) ||
+                        key.includes(normalizedLandmark)) {
+                        areaCode = value;
+                        areaType = AreaType.LANDMARK;
+                        break;
+                    }
+                }
+            }
+        }
+        // 3. If still no match, use coordinate-based zone
+        if (areaCode === "001") {
+            // Use coordinate-based zone determination
+            if (latitude > 9.0) {
+                areaType = AreaType.ZONE;
+                areaCode = "01";
+            }
+            else if (latitude > 7.0) {
+                areaType = AreaType.LANDMARK;
+                areaCode = "LMK";
+            }
+            else {
+                areaType = AreaType.STREET;
+                areaCode = "STR";
+            }
+        }
+        return {
+            type: areaType,
+            code: areaCode,
+        };
     }
-    else if (latitude > 7.0) {
-        return { type: AreaType.LANDMARK, code: "001" };
-    }
-    else {
-        return { type: AreaType.STREET, code: "001" };
+    catch (error) {
+        console.error("Error determining area identifier:", error);
+        return null;
     }
 }
 // --- Generate sequential location number ---
 /**
- * Returns a deterministic 4-digit location number based on a grid system.
+ * Returns a deterministic 4-digit location number based on coordinates.
  * This approach uses the fractional parts of the coordinates to create a
  * predictable and spatially relevant identifier.
  */
 function getNextLocationNumber(latitude, longitude) {
     try {
-        // This implementation uses a grid-based system based on coordinates
-        // to make the location number deterministic and spatially relevant.
-        // It divides each degree-square into a 100x100 grid.
-        // Get the first two digits of the fractional part of latitude (00-99)
+        // Base location number from coordinates
         const latPart = Math.floor((latitude % 1) * 100);
-        // Get the first two digits of the fractional part of longitude (00-99)
         const lonPart = Math.floor((longitude % 1) * 100);
-        // Combine them to form a 4-digit number (e.g., lat 52, lon 37 -> 5237)
         const locationNumber = `${latPart.toString().padStart(2, "0")}${lonPart
             .toString()
             .padStart(2, "0")}`;
         return locationNumber;
     }
     catch (error) {
-        console.error("Error generating location number from grid:", error);
-        // Fallback to a random number in case of unexpected errors
-        const randomNum = Math.floor(Math.random() * 9000) + 1000; // 1000-9999
+        console.error("Error generating location number:", error);
+        // Fallback to random number
+        const randomNum = Math.floor(Math.random() * 9000) + 1000;
         return randomNum.toString();
     }
 }
 /**
  * Generates a unique Digital Door Code (DDC) for Nigerian locations.
- * Format: NG-XX-YY-ZZZ-NNNN
+ * Simplified format: NG-XX-YY-ZZZ-HHHH-NNNN
  *   XX: Two-letter state code (e.g., LA for Lagos, KD for Kaduna)
  *   YY: Two-digit LGA code within the state
  *   ZZZ: Three-character area identifier with type prefix (STR, Z, or LMK)
- *   NNNN: Four-digit unique location number
+ *   HHHH: Street number (1-5 digits, no padding, 0 if not provided)
+ *   NNNN: Four-digit unique location number (coordinates-based)
  *
  * Examples:
- *   NG-LA-15-STR001-0042 (Street-based address in Lagos)
- *   NG-KD-08-Z001-0123 (Zone-based address in Kaduna)
- *   NG-FC-01-LMK001-0007 (Landmark-based address in FCT)
+ *   NG-LA-15-VIC-42-1234 (Victoria Island, house 42, location 1234)
+ *   NG-KD-08-Z01-0-0123 (Zone 01, no house number, location 123)
+ *   NG-FC-01-HOS-7-5678 (Hospital area, house 7, location 5678)
  *
  * @param latitude The latitude of the location.
  * @param longitude The longitude of the location.
+ * @param streetName Optional street name for area identification.
+ * @param landmark Optional landmark for area identification.
+ * @param houseNumber Optional house number for location identification.
  * @param stateCode Optional state code to use instead of looking it up.
  * @param lgaCode Optional LGA code to use instead of looking it up.
  * @returns The generated DDC string, or null if determination fails.
  */
-async function generateHhgCode(latitude, longitude, stateCode, lgaCode) {
+async function generateHhgCode(latitude, longitude, streetName, landmark, houseNumber, stateCode, lgaCode) {
     if (latitude === null ||
         longitude === null ||
         isNaN(latitude) ||
@@ -224,9 +488,12 @@ async function generateHhgCode(latitude, longitude, stateCode, lgaCode) {
     }
     // Ensure state code is 2 letters and LGA code is 2 digits
     const { stateCode: resolvedStateCode, lgaCode: resolvedLgaCode } = locationInfo;
-    const paddedLgaCode = resolvedLgaCode.padStart(2, "0");
-    // 2. Determine area identifier (STR, Z, or LMK + code)
-    const areaInfo = await determineAreaIdentifier(latitude, longitude);
+    // Normalize LGA code to 2 digits (remove leading zeros)
+    const normalizedLgaCode = parseInt(resolvedLgaCode, 10)
+        .toString()
+        .padStart(2, "0");
+    // 2. Determine area identifier with enhanced logic
+    const areaInfo = await determineAreaIdentifier(latitude, streetName, landmark);
     if (!areaInfo) {
         console.warn(`Could not determine area identifier for coordinates: ${latitude}, ${longitude}`);
         return null;
@@ -235,61 +502,77 @@ async function generateHhgCode(latitude, longitude, stateCode, lgaCode) {
     // Format area code based on type
     let formattedAreaCode;
     if (type === AreaType.ZONE) {
-        // For zone, use Z prefix with 3 digits (e.g., Z001)
-        formattedAreaCode = `${type}${code.padStart(3, "0")}`;
+        // For zone, use Z prefix with 2 digits (e.g., Z01)
+        formattedAreaCode = `${type}${code.padStart(2, "0")}`;
     }
     else {
-        // For STR and LMK, use full 3-char prefix and 3 digits (e.g., STR001, LMK001)
-        formattedAreaCode = `${type}${code.padStart(3, "0")}`;
+        // For STR and LMK, use the code as-is if it's 3 chars, otherwise pad to 3
+        if (code.length === 3) {
+            formattedAreaCode = code;
+        }
+        else {
+            formattedAreaCode = code.padStart(3, "0");
+        }
     }
-    // Pass the actual coordinates to the location number generator
+    // Generate location number (coordinates-based only)
     const locationNumber = getNextLocationNumber(latitude, longitude);
-    // Assemble the DDC
-    const ddc = `NG-${resolvedStateCode.toUpperCase()}-${paddedLgaCode}-${formattedAreaCode}-${locationNumber}`;
+    // Format street number (1-5 digits, no padding, 0 if not provided)
+    let formattedStreetNumber = houseNumber && houseNumber.trim()
+        ? parseInt(houseNumber.replace(/\D/g, ""), 10).toString()
+        : "0";
+    // Validate street number length (1-5 digits)
+    if (formattedStreetNumber !== "0" && formattedStreetNumber.length > 5) {
+        console.warn(`Street number ${formattedStreetNumber} is too long, truncating to 5 digits`);
+        formattedStreetNumber = formattedStreetNumber.slice(0, 5);
+    }
+    // Assemble the simplified DDC
+    const ddc = `NG-${resolvedStateCode.toUpperCase()}-${normalizedLgaCode}-${formattedAreaCode}-${formattedStreetNumber}-${locationNumber}`;
     return ddc;
 }
 /**
  * Parses a Digital Door Code (DDC) into its component parts.
+ * Simplified format: NG-XX-YY-ZZZ-HHHH-NNNN
  *
  * @param ddc The Digital Door Code to parse
  * @returns Object containing the parsed components, or null if invalid
  */
 function parseDDC(ddc) {
-    const parts = ddc.split("-");
-    if (parts.length !== 5 || parts[0] !== "NG") {
-        console.error(`Invalid DDC format: ${ddc}`);
+    try {
+        // Simplified regex for new format: NG-XX-YY-ZZZ-HHHH-NNNN
+        const ddcRegex = /^NG-([A-Z]{2})-(\d{2})-([A-Z0-9]{3})-(\d{1,5})-(\d{4})$/;
+        const match = ddc.match(ddcRegex);
+        if (!match) {
+            console.error(`Invalid DDC format: ${ddc}`);
+            return null;
+        }
+        const [, stateCode, lgaCode, areaCode, houseNumber, locationNumber] = match;
+        // Determine area type from area code
+        let areaType;
+        if (areaCode.startsWith("Z")) {
+            areaType = "ZONE";
+        }
+        else if (areaCode.startsWith("LMK") ||
+            areaCode.startsWith("HOS") ||
+            areaCode.startsWith("SCH")) {
+            areaType = "LANDMARK";
+        }
+        else {
+            areaType = "STREET";
+        }
+        return {
+            hhgCode: ddc,
+            stateCode,
+            lgaCode,
+            areaType,
+            areaCode,
+            houseNumber: houseNumber === "0" ? undefined : houseNumber,
+            locationNumber,
+        };
+    }
+    catch (error) {
+        console.error("Error parsing DDC:", error);
         return null;
     }
-    const stateCode = parts[1];
-    const lgaCode = parts[2];
-    // Parse area code (e.g., "STR001" or "Z001")
-    const areaFull = parts[3];
-    let areaType, areaCode;
-    if (areaFull.startsWith("STR")) {
-        areaType = "STR";
-        areaCode = areaFull.substring(3);
-    }
-    else if (areaFull.startsWith("LMK")) {
-        areaType = "LMK";
-        areaCode = areaFull.substring(3);
-    }
-    else if (areaFull.startsWith("Z")) {
-        areaType = "Z";
-        areaCode = areaFull.substring(1);
-    }
-    else {
-        console.error(`Invalid area format in DDC: ${areaFull}`);
-        return null;
-    }
-    const locationNumber = parts[4];
-    return {
-        hhgCode: ddc,
-        stateCode,
-        lgaCode,
-        areaType,
-        areaCode,
-        locationNumber,
-    };
 }
 /**
  * Generates the necessary data fields for updating an address.
@@ -308,9 +591,9 @@ async function generateAddressUpdateData(latitude, longitude) {
 /**
  * Enhanced address generation that handles rural areas intelligently
  */
-async function generateEnhancedAddress(latitude, longitude, city, userProvidedDescription, isRural = false) {
-    // Generate standard DDC
-    const hhgCode = await generateHhgCode(latitude, longitude);
+async function generateEnhancedAddress(latitude, longitude, city, userProvidedDescription, isRural = false, streetName, landmark, houseNumber, stateCode, lgaCode) {
+    // Generate DDC using forwarded components when available
+    const hhgCode = await generateHhgCode(latitude, longitude, streetName, landmark, houseNumber, stateCode, lgaCode);
     let addressComponents = {
         primary: userProvidedDescription || city,
         alternatives: [],

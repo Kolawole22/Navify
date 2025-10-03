@@ -171,6 +171,9 @@ export const createAddress = async (req: Request, res: Response) => {
     const ddc = await generateHhgCode(
       inputData.latitude,
       inputData.longitude,
+      inputData.street,
+      inputData.landmark,
+      inputData.houseNumber,
       inputData.stateCode,
       inputData.lgaCode
     );
