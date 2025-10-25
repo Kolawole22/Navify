@@ -7,7 +7,7 @@ exports.getCurrentUser = exports.login = exports.register = exports.verifyOtp = 
 const db_1 = require("../db");
 const schema_1 = require("../db/schema");
 const drizzle_orm_1 = require("drizzle-orm");
-const bcrypt_1 = __importDefault(require("bcrypt"));
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const zod_1 = require("zod"); // Add Zod import
 // z import will be used when implementing Zod validation
@@ -199,8 +199,20 @@ const register = async (req, res) => {
             return;
         }
         // Hash password
-        const salt = await bcrypt_1.default.genSalt(10);
-        const passwordHash = await bcrypt_1.default.hash(password, salt);
+        const salt = await bcryptjs_1.default.genSalt(10);
+        const passwordHash = await bcryptjs_1.default.hash(password, salt);
+        // Get the full state and LGA codes from the database
+        // This ensures we have the correct format for foreign key constraints
+        const locationInfo = await (0, addressing_1.findStateLga)(latitude, longitude);
+        if (!locationInfo) {
+            res.status(400).json({
+                error: "Could not determine State/LGA for the provided coordinates. Ensure location is within Nigeria.",
+            });
+            return;
+        }
+        // Use the provided state/LGA codes if available, otherwise use the looked-up ones
+        const finalStateCode = clientStateCode || locationInfo.stateCode;
+        const finalLgaCode = clientLgaCode || locationInfo.lgaCode;
         // --- Create User and Address in a Transaction ---
         const result = await db_1.db.transaction(async (tx) => {
             // Create user
@@ -227,8 +239,7 @@ const register = async (req, res) => {
             // --- Enhanced Address Generation (with rural support) ---
             let enhancedAddressInfo;
             let ddc = null;
-            let stateCode = "";
-            let lgaCode = "";
+            let ddcResult = null;
             let areaType = "";
             let areaCode = "";
             let locationNumber = "";
@@ -244,12 +255,16 @@ const register = async (req, res) => {
                 enhancedAddressInfo = await (0, addressing_1.generateEnhancedAddress)(latitude, longitude, city, userDescription || undefined, noStreetAddress, // Treat no street address as potentially rural
                 street, landmark, houseNumber, clientStateCode, clientLgaCode);
                 ddc = enhancedAddressInfo.hhgCode;
+                // Extract DDC components and get the full DDC result for generated house number
                 if (ddc) {
                     const ddcInfo = (0, addressing_1.parseDDC)(ddc);
                     if (ddcInfo) {
-                        ({ stateCode, lgaCode, areaType, areaCode, locationNumber } =
-                            ddcInfo);
+                        ({ areaType, areaCode, locationNumber } = ddcInfo);
+                        // Don't use parsed stateCode and lgaCode - they're normalized for DDC
+                        // Use the original client-provided codes or look them up
                     }
+                    // Get the full DDC result to extract generated house number
+                    ddcResult = await (0, addressing_1.generateHhgCode)(latitude, longitude, street, landmark, houseNumber, clientStateCode, clientLgaCode);
                 }
             }
             catch (error) {
@@ -267,12 +282,14 @@ const register = async (req, res) => {
                     else if (cityLower.includes("ibadan") || cityLower.includes("oyo"))
                         stateCodeForDDC = "OY";
                 }
-                ddc = await (0, addressing_1.generateHhgCode)(latitude, longitude, street, landmark, houseNumber, stateCodeForDDC);
-                if (ddc) {
-                    const ddcInfo = (0, addressing_1.parseDDC)(ddc);
+                ddcResult = await (0, addressing_1.generateHhgCode)(latitude, longitude, street, landmark, houseNumber, stateCodeForDDC);
+                if (ddcResult && ddcResult.ddc) {
+                    ddc = ddcResult.ddc;
+                    const ddcInfo = (0, addressing_1.parseDDC)(ddcResult.ddc);
                     if (ddcInfo) {
-                        ({ stateCode, lgaCode, areaType, areaCode, locationNumber } =
-                            ddcInfo);
+                        ({ areaType, areaCode, locationNumber } = ddcInfo);
+                        // Don't use parsed stateCode and lgaCode - they're normalized for DDC
+                        // Use the original client-provided codes or looked-up ones
                     }
                 }
             }
@@ -289,7 +306,10 @@ const register = async (req, res) => {
                     ? enhancedAddressInfo?.addressComponents?.primary || "" // Use generated street for rural areas
                     : street, // Use provided street for urban areas
                 city,
-                houseNumber: noStreetAddress ? "" : houseNumber, // Empty if no street address
+                houseNumber: noStreetAddress ? "" : houseNumber, // User-provided house number
+                generatedHouseNumber: ddcResult?.generatedHouseNumber || "", // Grid-based generated house number
+                h3Index: ddcResult?.h3Index || "", // H3 cell identifier
+                h3Resolution: ddcResult?.h3Resolution || 12, // Grid resolution used
                 landmark,
                 floor: apartment, // Map apartment to floor field
                 estate,
@@ -298,8 +318,8 @@ const register = async (req, res) => {
                 latitude,
                 longitude,
                 hhgCode: ddc, // Store the full DDC as the hhgCode
-                stateCode: clientStateCode || stateCode, // Use client-provided first
-                lgaCode: clientLgaCode || lgaCode, // Use client-provided first
+                stateCode: finalStateCode, // Use the resolved state code
+                lgaCode: finalLgaCode, // Use the resolved LGA code
                 areaType,
                 areaCode,
                 locationNumber,
@@ -320,8 +340,8 @@ const register = async (req, res) => {
             }, {
                 latitude: latitude.toString(),
                 longitude: longitude.toString(),
-                stateCode: clientStateCode || stateCode,
-                lgaCode: clientLgaCode || lgaCode,
+                stateCode: finalStateCode,
+                lgaCode: finalLgaCode,
                 city,
                 street: noStreetAddress
                     ? enhancedAddressInfo?.addressComponents?.primary || ""
@@ -398,7 +418,7 @@ const login = async (req, res) => {
             return;
         }
         // Check password
-        const isMatch = await bcrypt_1.default.compare(password, user.passwordHash);
+        const isMatch = await bcryptjs_1.default.compare(password, user.passwordHash);
         if (!isMatch) {
             res.status(401).json({ error: "Invalid credentials" }); // Password incorrect
             return;
@@ -455,8 +475,8 @@ const getCurrentUser = async (req, res) => {
             .limit(1);
         const currentUser = userResult[0];
         if (!currentUser) {
-            // User existed when token was issued, but not anymore?
-            res.status(404).json({ error: "User not found" });
+            // User existed when token was issued, but not anymore - treat as unauthorized
+            res.status(401).json({ error: "Unauthorized: User no longer exists" });
             return;
         }
         res.status(200).json({ user: currentUser });

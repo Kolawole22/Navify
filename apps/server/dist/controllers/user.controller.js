@@ -227,9 +227,9 @@ const getCurrentUserProfile = async (req, res) => {
             .where((0, drizzle_orm_1.eq)(schema_1.users.id, req.user.id))
             .limit(1);
         const user = userResult[0];
-        console.log("user", user);
         if (!user) {
-            res.status(404).json({ error: "User not found" });
+            // User existed when token was issued, but not anymore - treat as unauthorized
+            res.status(401).json({ error: "Unauthorized: User no longer exists" });
             return;
         }
         // Get user's addresses
@@ -247,6 +247,7 @@ const getCurrentUserProfile = async (req, res) => {
             areaCode: schema_2.addresses.areaCode,
             locationNumber: schema_2.addresses.locationNumber,
             houseNumber: schema_2.addresses.houseNumber,
+            generatedHouseNumber: schema_2.addresses.generatedHouseNumber,
             estate: schema_2.addresses.estate,
             floor: schema_2.addresses.floor,
             landmark: schema_2.addresses.landmark,

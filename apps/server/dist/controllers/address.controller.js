@@ -141,16 +141,30 @@ const createAddress = async (req, res) => {
             });
         }
         const inputData = validationResult.data;
+        // Get the full state and LGA codes from the database
+        // This ensures we have the correct format for foreign key constraints
+        const locationInfo = await (0, addressing_1.findStateLga)(inputData.latitude, inputData.longitude);
+        if (!locationInfo) {
+            res.status(400).json({
+                error: "Could not determine State/LGA for the provided coordinates. Ensure location is within Nigeria.",
+            });
+            return;
+        }
+        // Use the provided state/LGA codes if available, otherwise use the looked-up ones
+        const finalStateCode = inputData.stateCode || locationInfo.stateCode;
+        const finalLgaCode = inputData.lgaCode || locationInfo.lgaCode;
         // Generate the Digital Door Code (DDC) using the utility
         // Pass state and LGA codes if they're provided in the input
-        const ddc = await (0, addressing_1.generateHhgCode)(inputData.latitude, inputData.longitude, inputData.street, inputData.landmark, inputData.houseNumber, inputData.stateCode, inputData.lgaCode);
-        if (!ddc) {
+        const ddcResult = await (0, addressing_1.generateHhgCode)(inputData.latitude, inputData.longitude, inputData.street, inputData.landmark, inputData.houseNumber, finalStateCode, finalLgaCode);
+        if (!ddcResult) {
             res.status(400).json({
                 error: "Could not generate address code for the provided coordinates. Ensure location is within Nigeria.",
             });
             return;
         }
-        // Parse DDC components (format: NG-XX-YY-ZZZ-NNNN)
+        // Extract DDC components from the result
+        const { ddc, generatedHouseNumber, h3Index, h3Resolution, isCollision: _isCollision, collisionCount: _collisionCount, } = ddcResult;
+        // Parse DDC components (format: NG-XX-YY-ZZZ-GGGG-NNNN)
         const ddcInfo = (0, addressing_1.parseDDC)(ddc);
         if (!ddcInfo) {
             console.error(`Failed to parse generated DDC: ${ddc}`);
@@ -159,7 +173,10 @@ const createAddress = async (req, res) => {
                 .json({ error: "Internal error generating address components." });
             return;
         }
-        const { stateCode, lgaCode, areaType, areaCode, locationNumber } = ddcInfo;
+        const { areaType, areaCode, locationNumber } = ddcInfo;
+        // Use the full state and LGA codes for database storage
+        const stateCode = finalStateCode;
+        const lgaCode = finalLgaCode;
         // Prepare data for insertion using the correct schema fields
         // Handle missing or invalid street names
         let streetName = inputData.street;
@@ -190,7 +207,10 @@ const createAddress = async (req, res) => {
             longitude: inputData.longitude.toString(),
             street: streetName,
             city: inputData.city,
-            houseNumber: inputData.houseNumber,
+            houseNumber: inputData.houseNumber, // User-provided house number
+            generatedHouseNumber: generatedHouseNumber, // Grid-based generated house number
+            h3Index: h3Index, // H3 cell identifier
+            h3Resolution: h3Resolution, // Grid resolution used
             estate: inputData.estate,
             floor: inputData.floor,
             specialDescription: inputData.specialDescription,

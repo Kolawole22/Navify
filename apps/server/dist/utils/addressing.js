@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AreaType = void 0;
+exports.findStateLga = findStateLga;
 exports.generateHhgCode = generateHhgCode;
 exports.parseDDC = parseDDC;
 exports.generateAddressUpdateData = generateAddressUpdateData;
@@ -9,6 +10,7 @@ const db_1 = require("../db");
 const schema_1 = require("../db/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const rural_addressing_1 = require("./rural-addressing");
+const h3_grid_numbering_1 = require("./h3-grid-numbering");
 // --- Area Type Enum ---
 /**
  * Types of area identifiers used in the Digital Door Code
@@ -119,15 +121,12 @@ async function findStateLga(latitude, longitude) {
                 lgaCode: "001", // Default LGA code
             };
         }
-        // Extract the numeric part from LGA code
-        // LGA codes are in format like "AB001", "AB002", etc.
-        // We need to extract just the numeric part (001, 002, etc.)
+        // Return the full LGA code as stored in the database
+        // LGA codes are stored as full codes like "LA007", "AB001", etc.
         const fullLgaCode = lgaResult[0].code;
-        const numericPart = fullLgaCode.replace(/^[A-Z]+/, ''); // Remove all leading letters
-        console.log(`Debug: Found LGA - fullCode: "${fullLgaCode}", stateCode: "${stateCode}", extracted numeric: "${numericPart}"`);
         return {
             stateCode,
-            lgaCode: numericPart,
+            lgaCode: fullLgaCode, // Return the full LGA code, not just the numeric part
         };
     }
     catch (error) {
@@ -340,32 +339,72 @@ async function determineAreaIdentifier(latitude, streetName, landmark) {
     try {
         let areaCode = "001"; // Default fallback
         let areaType = AreaType.STREET; // Default type
+        console.log("🔍 determineAreaIdentifier called with:", {
+            latitude,
+            streetName,
+            landmark,
+        });
         // 1. Try to determine area from street name first
         if (streetName && streetName.trim()) {
             const normalizedStreet = streetName.toLowerCase().trim();
+            console.log("📍 Processing street name:", {
+                original: streetName,
+                normalized: normalizedStreet,
+            });
             // Check for exact matches first
             if (STREET_AREA_MAPPING[normalizedStreet]) {
                 areaCode = STREET_AREA_MAPPING[normalizedStreet];
                 areaType = AreaType.STREET;
+                console.log("✅ Found exact match:", areaCode);
             }
             else {
-                // Check for partial matches
-                for (const [key, value] of Object.entries(STREET_AREA_MAPPING)) {
-                    if (normalizedStreet.includes(key) ||
-                        key.includes(normalizedStreet)) {
-                        areaCode = value;
-                        areaType = AreaType.STREET;
-                        break;
-                    }
+                console.log("❌ No exact match found, trying derivation first...");
+                // Try derivation first for more meaningful codes
+                const base = normalizeStreetBaseName(streetName);
+                const derived = deriveThreeLetterStreetCode(base);
+                console.log("🔧 Deriving from street name:", {
+                    original: streetName,
+                    base,
+                    derived,
+                });
+                if (derived && derived.length === 3) {
+                    areaCode = derived;
+                    areaType = AreaType.STREET;
+                    console.log("✅ Using derived code:", areaCode);
                 }
-                // If still not matched, derive from the normalized base street name
-                if (areaCode === "001") {
-                    const base = normalizeStreetBaseName(streetName);
-                    const derived = deriveThreeLetterStreetCode(base);
-                    if (derived && derived.length === 3) {
-                        areaCode = derived;
-                        areaType = AreaType.STREET;
+                else {
+                    console.log("❌ Derivation failed, checking partial matches...");
+                    // Fallback to partial matches if derivation fails
+                    // Skip generic terms like "street", "road", "avenue" to avoid false matches
+                    const genericTerms = [
+                        "street",
+                        "road",
+                        "avenue",
+                        "close",
+                        "drive",
+                        "way",
+                        "boulevard",
+                        "crescent",
+                        "lane",
+                        "estate",
+                        "village",
+                        "compound",
+                        "plot",
+                        "block",
+                    ];
+                    for (const [key, value] of Object.entries(STREET_AREA_MAPPING)) {
+                        // Skip generic terms to avoid false matches
+                        if (genericTerms.includes(key))
+                            continue;
+                        if (normalizedStreet.includes(key) ||
+                            key.includes(normalizedStreet)) {
+                            areaCode = value;
+                            areaType = AreaType.STREET;
+                            console.log("✅ Found partial match:", { key, value, areaCode });
+                            break;
+                        }
                     }
+                    console.log("🔍 After partial matching, areaCode:", areaCode);
                 }
             }
         }
@@ -404,10 +443,12 @@ async function determineAreaIdentifier(latitude, streetName, landmark) {
                 areaCode = "STR";
             }
         }
-        return {
+        const result = {
             type: areaType,
             code: areaCode,
         };
+        console.log("🎯 Final area identifier result:", result);
+        return result;
     }
     catch (error) {
         console.error("Error determining area identifier:", error);
@@ -439,26 +480,26 @@ function getNextLocationNumber(latitude, longitude) {
 }
 /**
  * Generates a unique Digital Door Code (DDC) for Nigerian locations.
- * Simplified format: NG-XX-YY-ZZZ-HHHH-NNNN
+ * Simplified format: NG-XX-YY-ZZZ-GGGG-NNNN
  *   XX: Two-letter state code (e.g., LA for Lagos, KD for Kaduna)
  *   YY: Two-digit LGA code within the state
  *   ZZZ: Three-character area identifier with type prefix (STR, Z, or LMK)
- *   HHHH: Street number (1-5 digits, no padding, 0 if not provided)
+ *   GGGG: Generated grid-based house number (10s sequence with collision handling)
  *   NNNN: Four-digit unique location number (coordinates-based)
  *
  * Examples:
- *   NG-LA-15-VIC-42-1234 (Victoria Island, house 42, location 1234)
- *   NG-KD-08-Z01-0-0123 (Zone 01, no house number, location 123)
- *   NG-FC-01-HOS-7-5678 (Hospital area, house 7, location 5678)
+ *   NG-LA-15-VIC-8740-1234 (Victoria Island, generated house 8740, location 1234)
+ *   NG-KD-08-Z01-8741-0123 (Zone 01, generated house 8741, location 123)
+ *   NG-FC-01-HOS-8742-5678 (Hospital area, generated house 8742, location 5678)
  *
  * @param latitude The latitude of the location.
  * @param longitude The longitude of the location.
  * @param streetName Optional street name for area identification.
  * @param landmark Optional landmark for area identification.
- * @param houseNumber Optional house number for location identification.
+ * @param houseNumber Optional user-provided house number (for display purposes).
  * @param stateCode Optional state code to use instead of looking it up.
  * @param lgaCode Optional LGA code to use instead of looking it up.
- * @returns The generated DDC string, or null if determination fails.
+ * @returns The generated DDC result with grid information, or null if determination fails.
  */
 async function generateHhgCode(latitude, longitude, streetName, landmark, houseNumber, stateCode, lgaCode) {
     if (latitude === null ||
@@ -485,19 +526,21 @@ async function generateHhgCode(latitude, longitude, streetName, landmark, houseN
     }
     // Ensure state code is 2 letters and LGA code is 2 digits
     const { stateCode: resolvedStateCode, lgaCode: resolvedLgaCode } = locationInfo;
-    // Validate and normalize LGA code to 2 digits
+    // Extract numeric part from LGA code for DDC generation
+    // LGA codes are stored as full codes like "LA007", "AB001", etc.
+    // For DDC generation, we need just the numeric part (007, 001, etc.)
     let normalizedLgaCode;
-    const lgaNumber = parseInt(resolvedLgaCode, 10);
-    console.log(`Debug: resolvedLgaCode = "${resolvedLgaCode}", parsed as number = ${lgaNumber}`);
+    // Extract numeric part from the LGA code
+    const numericPart = resolvedLgaCode.replace(/^[A-Z]+/, ""); // Remove all leading letters
+    const lgaNumber = parseInt(numericPart, 10);
     if (isNaN(lgaNumber) || lgaNumber < 0) {
-        console.error(`Invalid LGA code: ${resolvedLgaCode}. Expected a numeric value.`);
+        console.error(`Invalid LGA code: ${resolvedLgaCode}. Could not extract numeric part.`);
         // Fallback to default LGA code
         normalizedLgaCode = "01";
     }
     else {
         normalizedLgaCode = lgaNumber.toString().padStart(2, "0");
     }
-    console.log(`Debug: Final normalizedLgaCode = "${normalizedLgaCode}"`);
     // 2. Determine area identifier with enhanced logic
     const areaInfo = await determineAreaIdentifier(latitude, streetName, landmark);
     if (!areaInfo) {
@@ -520,20 +563,31 @@ async function generateHhgCode(latitude, longitude, streetName, landmark, houseN
             formattedAreaCode = code.padStart(3, "0");
         }
     }
+    // Generate grid-based house number
+    const gridResult = await (0, h3_grid_numbering_1.generateGridHouseNumber)(latitude, longitude);
+    const generatedHouseNumber = gridResult.generatedNumber;
     // Generate location number (coordinates-based only)
     const locationNumber = getNextLocationNumber(latitude, longitude);
-    // Format street number (1-5 digits, no padding, 0 if not provided)
-    let formattedStreetNumber = houseNumber && houseNumber.trim()
+    // Format user-provided street number (for display purposes, not used in DDC)
+    let userStreetNumber = houseNumber && houseNumber.trim()
         ? parseInt(houseNumber.replace(/\D/g, ""), 10).toString()
         : "0";
-    // Validate street number length (1-5 digits)
-    if (formattedStreetNumber !== "0" && formattedStreetNumber.length > 5) {
-        console.warn(`Street number ${formattedStreetNumber} is too long, truncating to 5 digits`);
-        formattedStreetNumber = formattedStreetNumber.slice(0, 5);
+    // Validate user street number length (1-5 digits)
+    if (userStreetNumber !== "0" && userStreetNumber.length > 5) {
+        console.warn(`User street number ${userStreetNumber} is too long, truncating to 5 digits`);
+        userStreetNumber = userStreetNumber.slice(0, 5);
     }
-    // Assemble the simplified DDC
-    const ddc = `NG-${resolvedStateCode.toUpperCase()}-${normalizedLgaCode}-${formattedAreaCode}-${formattedStreetNumber}-${locationNumber}`;
-    return ddc;
+    // Assemble the simplified DDC using generated house number
+    const ddc = `NG-${resolvedStateCode.toUpperCase()}-${normalizedLgaCode}-${formattedAreaCode}-${generatedHouseNumber}-${locationNumber}`;
+    return {
+        ddc,
+        generatedHouseNumber,
+        h3Index: gridResult.h3Index,
+        h3Resolution: gridResult.resolution,
+        isCollision: gridResult.isCollision,
+        collisionCount: gridResult.collisionCount,
+        userHouseNumber: userStreetNumber,
+    };
 }
 /**
  * Parses a Digital Door Code (DDC) into its component parts.
@@ -588,18 +642,19 @@ function parseDDC(ddc) {
  * @returns An object containing the update data, or null if generation fails.
  */
 async function generateAddressUpdateData(latitude, longitude) {
-    const ddc = await generateHhgCode(latitude, longitude);
-    if (!ddc) {
+    const ddcResult = await generateHhgCode(latitude, longitude);
+    if (!ddcResult) {
         return null;
     }
-    return parseDDC(ddc);
+    return parseDDC(ddcResult.ddc);
 }
 /**
  * Enhanced address generation that handles rural areas intelligently
  */
 async function generateEnhancedAddress(latitude, longitude, city, userProvidedDescription, isRural = false, streetName, landmark, houseNumber, stateCode, lgaCode) {
     // Generate DDC using forwarded components when available
-    const hhgCode = await generateHhgCode(latitude, longitude, streetName, landmark, houseNumber, stateCode, lgaCode);
+    const hhgCodeResult = await generateHhgCode(latitude, longitude, streetName, landmark, houseNumber, stateCode, lgaCode);
+    const hhgCode = hhgCodeResult?.ddc || null;
     let addressComponents = {
         primary: userProvidedDescription || city,
         alternatives: [],

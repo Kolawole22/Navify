@@ -37,7 +37,10 @@ exports.addresses = (0, pg_core_1.pgTable)("addresses", {
     areaType: (0, pg_core_1.text)("area_type"), // STR, Z, or LMK
     areaCode: (0, pg_core_1.text)("area_code"), // Area identifier code
     locationNumber: (0, pg_core_1.text)("location_number"), // 4-digit unique location number
-    houseNumber: (0, pg_core_1.text)("house_number"),
+    houseNumber: (0, pg_core_1.text)("house_number"), // User-provided house number
+    generatedHouseNumber: (0, pg_core_1.text)("generated_house_number"), // Grid-based generated house number
+    h3Index: (0, pg_core_1.text)("h3_index"), // H3 cell identifier for spatial queries
+    h3Resolution: (0, pg_core_1.integer)("h3_resolution").default(12), // Grid resolution used
     estate: (0, pg_core_1.text)("estate"),
     floor: (0, pg_core_1.text)("floor"), // Renamed from apartment
     landmark: (0, pg_core_1.text)("landmark"),
@@ -58,6 +61,8 @@ exports.addresses = (0, pg_core_1.pgTable)("addresses", {
         hhgCodeIdx: (0, pg_core_1.index)("address_hhg_code_idx").on(table.hhgCode),
         coordsIdx: (0, pg_core_1.index)("address_coords_idx").on(table.latitude, table.longitude),
         stateLgaIdx: (0, pg_core_1.index)("address_state_lga_idx").on(table.stateCode, table.lgaCode),
+        h3IndexIdx: (0, pg_core_1.index)("addresses_h3_index_idx").on(table.h3Index),
+        generatedHouseNumberIdx: (0, pg_core_1.index)("addresses_generated_house_number_idx").on(table.generatedHouseNumber),
     };
 });
 // Define relations (many addresses can belong to one user)
