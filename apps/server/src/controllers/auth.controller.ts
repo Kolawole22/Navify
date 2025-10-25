@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { db } from "../db";
 import { users, addresses } from "../db/schema";
 import { eq } from "drizzle-orm";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { z } from "zod"; // Add Zod import
 // z import will be used when implementing Zod validation
@@ -306,6 +306,7 @@ export const register = async (req: Request, res: Response) => {
       // --- Enhanced Address Generation (with rural support) ---
       let enhancedAddressInfo;
       let ddc: string | null = null;
+      let ddcResult: any = null;
       let areaType: string = "";
       let areaCode: string = "";
       let locationNumber: string = "";
@@ -334,6 +335,7 @@ export const register = async (req: Request, res: Response) => {
 
         ddc = enhancedAddressInfo.hhgCode;
 
+        // Extract DDC components and get the full DDC result for generated house number
         if (ddc) {
           const ddcInfo = parseDDC(ddc);
           if (ddcInfo) {
@@ -341,6 +343,17 @@ export const register = async (req: Request, res: Response) => {
             // Don't use parsed stateCode and lgaCode - they're normalized for DDC
             // Use the original client-provided codes or look them up
           }
+
+          // Get the full DDC result to extract generated house number
+          ddcResult = await generateHhgCode(
+            latitude,
+            longitude,
+            street,
+            landmark,
+            houseNumber,
+            clientStateCode,
+            clientLgaCode
+          );
         }
       } catch (error) {
         console.warn(
@@ -359,7 +372,7 @@ export const register = async (req: Request, res: Response) => {
             stateCodeForDDC = "OY";
         }
 
-        ddc = await generateHhgCode(
+        ddcResult = await generateHhgCode(
           latitude,
           longitude,
           street,
@@ -367,8 +380,9 @@ export const register = async (req: Request, res: Response) => {
           houseNumber,
           stateCodeForDDC
         );
-        if (ddc) {
-          const ddcInfo = parseDDC(ddc);
+        if (ddcResult && ddcResult.ddc) {
+          ddc = ddcResult.ddc;
+          const ddcInfo = parseDDC(ddcResult.ddc);
           if (ddcInfo) {
             ({ areaType, areaCode, locationNumber } = ddcInfo);
             // Don't use parsed stateCode and lgaCode - they're normalized for DDC
@@ -393,7 +407,10 @@ export const register = async (req: Request, res: Response) => {
             ? enhancedAddressInfo?.addressComponents?.primary || "" // Use generated street for rural areas
             : street, // Use provided street for urban areas
           city,
-          houseNumber: noStreetAddress ? "" : houseNumber, // Empty if no street address
+          houseNumber: noStreetAddress ? "" : houseNumber, // User-provided house number
+          generatedHouseNumber: ddcResult?.generatedHouseNumber || "", // Grid-based generated house number
+          h3Index: ddcResult?.h3Index || "", // H3 cell identifier
+          h3Resolution: ddcResult?.h3Resolution || 12, // Grid resolution used
           landmark,
           floor: apartment, // Map apartment to floor field
           estate,
@@ -582,8 +599,8 @@ export const getCurrentUser = async (req: Request, res: Response) => {
     const currentUser = userResult[0];
 
     if (!currentUser) {
-      // User existed when token was issued, but not anymore?
-      res.status(404).json({ error: "User not found" });
+      // User existed when token was issued, but not anymore - treat as unauthorized
+      res.status(401).json({ error: "Unauthorized: User no longer exists" });
       return;
     }
 

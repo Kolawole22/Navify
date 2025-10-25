@@ -81,7 +81,7 @@ export default function RootLayout() {
       <Stack.Screen name="modal" options={{ gestureEnabled: false }} />
       {/* Address-related screens */}
       <Stack.Screen
-        name="create-address"
+        name="create-new-address"
         options={{
           headerShown: true,
           headerShadowVisible: false,

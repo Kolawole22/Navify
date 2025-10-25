@@ -187,7 +187,7 @@ export const createAddress = async (req: Request, res: Response) => {
 
     // Generate the Digital Door Code (DDC) using the utility
     // Pass state and LGA codes if they're provided in the input
-    const ddc = await generateHhgCode(
+    const ddcResult = await generateHhgCode(
       inputData.latitude,
       inputData.longitude,
       inputData.street,
@@ -197,7 +197,7 @@ export const createAddress = async (req: Request, res: Response) => {
       finalLgaCode
     );
 
-    if (!ddc) {
+    if (!ddcResult) {
       res.status(400).json({
         error:
           "Could not generate address code for the provided coordinates. Ensure location is within Nigeria.",
@@ -205,7 +205,17 @@ export const createAddress = async (req: Request, res: Response) => {
       return;
     }
 
-    // Parse DDC components (format: NG-XX-YY-ZZZ-NNNN)
+    // Extract DDC components from the result
+    const {
+      ddc,
+      generatedHouseNumber,
+      h3Index,
+      h3Resolution,
+      isCollision: _isCollision,
+      collisionCount: _collisionCount,
+    } = ddcResult;
+
+    // Parse DDC components (format: NG-XX-YY-ZZZ-GGGG-NNNN)
     const ddcInfo = parseDDC(ddc);
     if (!ddcInfo) {
       console.error(`Failed to parse generated DDC: ${ddc}`);
@@ -253,7 +263,10 @@ export const createAddress = async (req: Request, res: Response) => {
       longitude: inputData.longitude.toString(),
       street: streetName,
       city: inputData.city,
-      houseNumber: inputData.houseNumber,
+      houseNumber: inputData.houseNumber, // User-provided house number
+      generatedHouseNumber: generatedHouseNumber, // Grid-based generated house number
+      h3Index: h3Index, // H3 cell identifier
+      h3Resolution: h3Resolution, // Grid resolution used
       estate: inputData.estate,
       floor: inputData.floor,
       specialDescription: inputData.specialDescription,

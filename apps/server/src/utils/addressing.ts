@@ -5,6 +5,7 @@ import {
   generateRuralAddressComponents,
   generateCoordinateDescription,
 } from "./rural-addressing";
+import { generateGridHouseNumber } from "./h3-grid-numbering";
 
 // --- Area Type Enum ---
 /**
@@ -526,27 +527,40 @@ function getNextLocationNumber(latitude: number, longitude: number): string {
 }
 
 /**
+ * Interface for the result of DDC generation with grid information
+ */
+export interface DDCGenerationResult {
+  ddc: string;
+  generatedHouseNumber: string;
+  h3Index: string;
+  h3Resolution: number;
+  isCollision: boolean;
+  collisionCount: number;
+  userHouseNumber: string;
+}
+
+/**
  * Generates a unique Digital Door Code (DDC) for Nigerian locations.
- * Simplified format: NG-XX-YY-ZZZ-HHHH-NNNN
+ * Simplified format: NG-XX-YY-ZZZ-GGGG-NNNN
  *   XX: Two-letter state code (e.g., LA for Lagos, KD for Kaduna)
  *   YY: Two-digit LGA code within the state
  *   ZZZ: Three-character area identifier with type prefix (STR, Z, or LMK)
- *   HHHH: Street number (1-5 digits, no padding, 0 if not provided)
+ *   GGGG: Generated grid-based house number (10s sequence with collision handling)
  *   NNNN: Four-digit unique location number (coordinates-based)
  *
  * Examples:
- *   NG-LA-15-VIC-42-1234 (Victoria Island, house 42, location 1234)
- *   NG-KD-08-Z01-0-0123 (Zone 01, no house number, location 123)
- *   NG-FC-01-HOS-7-5678 (Hospital area, house 7, location 5678)
+ *   NG-LA-15-VIC-8740-1234 (Victoria Island, generated house 8740, location 1234)
+ *   NG-KD-08-Z01-8741-0123 (Zone 01, generated house 8741, location 123)
+ *   NG-FC-01-HOS-8742-5678 (Hospital area, generated house 8742, location 5678)
  *
  * @param latitude The latitude of the location.
  * @param longitude The longitude of the location.
  * @param streetName Optional street name for area identification.
  * @param landmark Optional landmark for area identification.
- * @param houseNumber Optional house number for location identification.
+ * @param houseNumber Optional user-provided house number (for display purposes).
  * @param stateCode Optional state code to use instead of looking it up.
  * @param lgaCode Optional LGA code to use instead of looking it up.
- * @returns The generated DDC string, or null if determination fails.
+ * @returns The generated DDC result with grid information, or null if determination fails.
  */
 export async function generateHhgCode(
   latitude: number,
@@ -556,7 +570,7 @@ export async function generateHhgCode(
   houseNumber?: string,
   stateCode?: string,
   lgaCode?: string
-): Promise<string | null> {
+): Promise<DDCGenerationResult | null> {
   if (
     latitude === null ||
     longitude === null ||
@@ -637,27 +651,39 @@ export async function generateHhgCode(
     }
   }
 
+  // Generate grid-based house number
+  const gridResult = await generateGridHouseNumber(latitude, longitude);
+  const generatedHouseNumber = gridResult.generatedNumber;
+
   // Generate location number (coordinates-based only)
   const locationNumber = getNextLocationNumber(latitude, longitude);
 
-  // Format street number (1-5 digits, no padding, 0 if not provided)
-  let formattedStreetNumber =
+  // Format user-provided street number (for display purposes, not used in DDC)
+  let userStreetNumber =
     houseNumber && houseNumber.trim()
       ? parseInt(houseNumber.replace(/\D/g, ""), 10).toString()
       : "0";
 
-  // Validate street number length (1-5 digits)
-  if (formattedStreetNumber !== "0" && formattedStreetNumber.length > 5) {
+  // Validate user street number length (1-5 digits)
+  if (userStreetNumber !== "0" && userStreetNumber.length > 5) {
     console.warn(
-      `Street number ${formattedStreetNumber} is too long, truncating to 5 digits`
+      `User street number ${userStreetNumber} is too long, truncating to 5 digits`
     );
-    formattedStreetNumber = formattedStreetNumber.slice(0, 5);
+    userStreetNumber = userStreetNumber.slice(0, 5);
   }
 
-  // Assemble the simplified DDC
-  const ddc = `NG-${resolvedStateCode.toUpperCase()}-${normalizedLgaCode}-${formattedAreaCode}-${formattedStreetNumber}-${locationNumber}`;
+  // Assemble the simplified DDC using generated house number
+  const ddc = `NG-${resolvedStateCode.toUpperCase()}-${normalizedLgaCode}-${formattedAreaCode}-${generatedHouseNumber}-${locationNumber}`;
 
-  return ddc;
+  return {
+    ddc,
+    generatedHouseNumber,
+    h3Index: gridResult.h3Index,
+    h3Resolution: gridResult.resolution,
+    isCollision: gridResult.isCollision,
+    collisionCount: gridResult.collisionCount,
+    userHouseNumber: userStreetNumber,
+  };
 }
 
 /**
@@ -733,13 +759,13 @@ export async function generateAddressUpdateData(
   latitude: number,
   longitude: number
 ): Promise<AddressUpdateData | null> {
-  const ddc = await generateHhgCode(latitude, longitude);
+  const ddcResult = await generateHhgCode(latitude, longitude);
 
-  if (!ddc) {
+  if (!ddcResult) {
     return null;
   }
 
-  return parseDDC(ddc);
+  return parseDDC(ddcResult.ddc);
 }
 
 /**
@@ -770,7 +796,7 @@ export async function generateEnhancedAddress(
   };
 }> {
   // Generate DDC using forwarded components when available
-  const hhgCode = await generateHhgCode(
+  const hhgCodeResult = await generateHhgCode(
     latitude,
     longitude,
     streetName,
@@ -779,6 +805,8 @@ export async function generateEnhancedAddress(
     stateCode,
     lgaCode
   );
+
+  const hhgCode = hhgCodeResult?.ddc || null;
 
   let addressComponents = {
     primary: userProvidedDescription || city,

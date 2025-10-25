@@ -18,10 +18,15 @@ export default function ProfileScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
-  const { data: profile, isLoading, error } = useUserProfile();
+  const {
+    data: profile,
+    isLoading,
+    error,
+    refetch: refetchProfile,
+  } = useUserProfile();
   const { showToast } = useToast();
 
-  // console.log("profile", profile);
+  console.log("profile", profile);
 
   // Extract personal code from profile data
   const personalCodeData = profile
@@ -134,7 +139,7 @@ export default function ProfileScreen() {
       <SafeAreaContainer edges={["top"]} className="bg-white flex-1">
         <View className="flex-1 justify-center items-center p-5">
           <TextNormal>Failed to load profile</TextNormal>
-          <Button onPress={() => window.location.reload()} className="mt-4">
+          <Button onPress={() => refetchProfile()} className="mt-4">
             Retry
           </Button>
         </View>
@@ -300,6 +305,7 @@ export default function ProfileScreen() {
                         name: address.street || address.landmark || "Address",
                         lat: address.latitude,
                         lng: address.longitude,
+                        id: address.id,
                       },
                     })
                   }
@@ -311,11 +317,14 @@ export default function ProfileScreen() {
                     </Body>
                   </View>
                   <Body className="text-gray-800 mb-1">
-                    {address.street || address.landmark || "Address"}
+                    {address.houseNumber || ""}{" "}
+                    {address.street || address.landmark || "Address"},{" "}
+                    {address.city}
                   </Body>
-                  {address.city && (
+
+                  {address.generatedHouseNumber && (
                     <Body className="text-gray-500 text-sm">
-                      {address.city}
+                      Navify House Number: {address.generatedHouseNumber}
                     </Body>
                   )}
                 </TouchableOpacity>

@@ -108,6 +108,7 @@ export interface UserProfile {
     areaCode: string | null;
     locationNumber: string | null;
     houseNumber: string | null;
+    generatedHouseNumber: string;
     estate: string | null;
     floor: string | null;
     landmark: string | null;

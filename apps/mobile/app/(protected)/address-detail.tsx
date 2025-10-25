@@ -98,6 +98,9 @@ export default function AddressDetailScreen() {
   const { data } = useUserProfile();
   const user = data?.user;
 
+  console.log("address", address);
+  console.log("params", params);
+
   const handlePrintAddress = async () => {
     try {
       // Create a mock address object for now - this should be replaced with actual address data
@@ -109,6 +112,7 @@ export default function AddressDetailScreen() {
         areaType: address?.areaType || "TNK",
         locationNumber: address?.locationNumber || "214",
         houseNumber: address?.houseNumber || "180",
+        generatedHouseNumber: address?.generatedHouseNumber || "8740",
         city: address?.city || name,
         street: address?.street || "Street",
         stateCode: address?.stateCode || "LA",
@@ -144,6 +148,7 @@ export default function AddressDetailScreen() {
         areaType: address?.areaType || "TNK",
         locationNumber: address?.locationNumber || "214",
         houseNumber: address?.houseNumber || "180",
+        generatedHouseNumber: address?.generatedHouseNumber || "8740",
         city: name,
         street: address?.street || "Street",
         stateCode: address?.stateCode || "LA",
@@ -250,6 +255,36 @@ export default function AddressDetailScreen() {
           {/* Location Details */}
           <H3 className="mb-2">{name || "Address"}</H3>
 
+          {/* House Number Section - Prominently Display Generated Number */}
+          {address?.generatedHouseNumber && (
+            <View className="bg-[#005C3E] rounded-lg p-4 mb-4">
+              <View className="flex-row items-center justify-between">
+                <View className="flex-1">
+                  <TextNormal className="text-white/80 text-sm mb-1">
+                    Navify House Number
+                  </TextNormal>
+                  <H2 className="text-white font-bold">
+                    {address.generatedHouseNumber}
+                  </H2>
+                </View>
+                <Ionicons name="home-outline" size={32} color="white" />
+              </View>
+            </View>
+          )}
+
+          {/* User-Provided House Number (Secondary) */}
+          {address?.houseNumber &&
+            address.houseNumber !== address?.generatedHouseNumber && (
+              <View className="bg-gray-100 rounded-lg p-3 mb-4">
+                <TextNormal className="text-gray-600 text-sm mb-1">
+                  Building Number
+                </TextNormal>
+                <TextNormal className="text-gray-800 font-medium">
+                  {address.houseNumber}
+                </TextNormal>
+              </View>
+            )}
+
           <View className="flex-row items-center mb-4">
             <Ionicons name="location-outline" size={16} color="#666" />
             <TextNormal className="text-gray-600 ml-1">
@@ -265,26 +300,27 @@ export default function AddressDetailScreen() {
                 id: 1,
                 userId: "user123",
                 hhgCode: code,
-                areaCode: "KWLR",
-                areaType: "TNK",
-                locationNumber: "214",
-                houseNumber: "180",
+                areaCode: address?.areaCode || "KWLR",
+                areaType: address?.areaType || "TNK",
+                locationNumber: address?.locationNumber || "214",
+                houseNumber: address?.houseNumber || "180",
+                generatedHouseNumber: address?.generatedHouseNumber || "8740",
                 city: name,
-                street: "Street",
-                stateCode: "LA",
-                lgaCode: "LGA001",
-                estate: "Estate",
-                floor: 1,
-                landmark: "Landmark",
-                specialDescription: "",
-                category: "residential",
-                photoUrls: [],
-                isSaved: true,
-                label: "Home",
+                street: address?.street || "Street",
+                stateCode: address?.stateCode || "LA",
+                lgaCode: address?.lgaCode || "LGA001",
+                estate: address?.estate || "Estate",
+                floor: address?.floor || 1,
+                landmark: address?.landmark || "Landmark",
+                specialDescription: address?.specialDescription || "",
+                category: address?.category || "residential",
+                photoUrls: address?.photoUrls || [],
+                isSaved: address?.isSaved || true,
+                label: address?.label || "Home",
                 latitude: latitude.toString(),
                 longitude: longitude.toString(),
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
+                createdAt: address?.createdAt || new Date().toISOString(),
+                updatedAt: address?.updatedAt || new Date().toISOString(),
               }}
             />
           </View>

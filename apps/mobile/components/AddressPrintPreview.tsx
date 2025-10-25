@@ -21,6 +21,7 @@ export default function AddressPrintPreview({
   const areaType = address.areaType || "TNK";
   const locationNumber = address.locationNumber || "214";
   const houseNumber = address.houseNumber || "180";
+  const generatedHouseNumber = address.generatedHouseNumber || "8740";
 
   // Use stored QR code URL or fallback to backend generation
   const getQRCodeURL = (): string => {
@@ -82,14 +83,27 @@ export default function AddressPrintPreview({
               <Text style={styles.value}>{address.street || ""}</Text>
             </View>
             <View style={styles.addressRow}>
-              <Text style={styles.label}>HOUSE No.</Text>
-              <Text style={styles.value}>{address.houseNumber || ""}</Text>
+              <Text style={styles.label}>NAVIFY HOUSE No.</Text>
+              <Text style={styles.value}>{generatedHouseNumber}</Text>
             </View>
+            {address.houseNumber &&
+              address.houseNumber !== generatedHouseNumber && (
+                <View style={styles.addressRow}>
+                  <Text style={styles.label}>USER HOUSE No.</Text>
+                  <Text style={styles.value}>{address.houseNumber}</Text>
+                </View>
+              )}
           </View>
 
-          {/* Large house number display */}
+          {/* Large house number display - Show generated number prominently */}
           <View style={styles.largeNumberContainer}>
-            <Text style={styles.largeNumber}>{houseNumber}</Text>
+            <Text style={styles.largeNumber}>{generatedHouseNumber}</Text>
+            {address.houseNumber &&
+              address.houseNumber !== generatedHouseNumber && (
+                <Text style={styles.secondaryNumber}>
+                  Building: {address.houseNumber}
+                </Text>
+              )}
           </View>
         </View>
       </View>
@@ -195,5 +209,11 @@ const styles = StyleSheet.create({
     color: "#000",
     fontSize: 72,
     fontWeight: "bold",
+  },
+  secondaryNumber: {
+    color: "#666",
+    fontSize: 16,
+    fontWeight: "500",
+    marginTop: 8,
   },
 });

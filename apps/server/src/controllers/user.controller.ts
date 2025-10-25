@@ -248,9 +248,9 @@ export const getCurrentUserProfile = async (req: Request, res: Response) => {
       .limit(1);
 
     const user = userResult[0];
-    console.log("user", user);
     if (!user) {
-      res.status(404).json({ error: "User not found" });
+      // User existed when token was issued, but not anymore - treat as unauthorized
+      res.status(401).json({ error: "Unauthorized: User no longer exists" });
       return;
     }
 
@@ -269,6 +269,7 @@ export const getCurrentUserProfile = async (req: Request, res: Response) => {
         areaCode: addresses.areaCode,
         locationNumber: addresses.locationNumber,
         houseNumber: addresses.houseNumber,
+        generatedHouseNumber: addresses.generatedHouseNumber,
         estate: addresses.estate,
         floor: addresses.floor,
         landmark: addresses.landmark,

@@ -16,7 +16,10 @@ export interface Address {
   estate: string;
   floor: number;
   hhgCode: string;
-  houseNumber: string;
+  houseNumber: string; // User-provided house number
+  generatedHouseNumber?: string; // Grid-based generated house number
+  h3Index?: string; // H3 cell identifier for debugging/admin purposes
+  h3Resolution?: number; // Grid resolution used
   id: number;
   isSaved: boolean;
   isBookmarked?: boolean; // Add bookmark status

@@ -126,7 +126,7 @@ export default function CreatePasswordScreen() {
       onSuccess: () => {
         // Navigation is handled by root layout watching auth state
         console.log("Registration successful!");
-        router.replace("/(protected)/(tabs)");
+        router.replace("/login");
       },
       onError: (err) => {
         console.error("Registration failed:", err);

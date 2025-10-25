@@ -52,7 +52,10 @@ export const addresses = pgTable(
     areaType: text("area_type"), // STR, Z, or LMK
     areaCode: text("area_code"), // Area identifier code
     locationNumber: text("location_number"), // 4-digit unique location number
-    houseNumber: text("house_number"),
+    houseNumber: text("house_number"), // User-provided house number
+    generatedHouseNumber: text("generated_house_number"), // Grid-based generated house number
+    h3Index: text("h3_index"), // H3 cell identifier for spatial queries
+    h3Resolution: integer("h3_resolution").default(12), // Grid resolution used
     estate: text("estate"),
     floor: text("floor"), // Renamed from apartment
     landmark: text("landmark"),
@@ -79,6 +82,10 @@ export const addresses = pgTable(
       stateLgaIdx: index("address_state_lga_idx").on(
         table.stateCode,
         table.lgaCode
+      ),
+      h3IndexIdx: index("addresses_h3_index_idx").on(table.h3Index),
+      generatedHouseNumberIdx: index("addresses_generated_house_number_idx").on(
+        table.generatedHouseNumber
       ),
     };
   }

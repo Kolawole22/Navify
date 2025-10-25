@@ -10,7 +10,7 @@ import { triggerToast } from "./toastController";
 // Use your machine's network IP for physical devices
 // process.env.EXPO_PUBLIC_API_BASE_URL ||
 // export const BASE_URL = "https://navify.onrender.com"; //"http://192.168.0.107:3006/api";
-export const BASE_URL = "http://192.168.0.110:3006";
+export const BASE_URL = "http://192.168.0.106:3006";
 export const API_URL = BASE_URL + "/api";
 
 // --- Create Axios Instance ---

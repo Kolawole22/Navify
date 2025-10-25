@@ -1,5 +1,5 @@
 ### Get all states
-GET http://localhost:3000/api/locations/states
+GET http://localhost:3006/api/locations/states
 Content-Type: application/json
 
 ### Get LGAs for a specific state by state code
@@ -15,7 +15,7 @@ GET http://localhost:3000/api/address/categories
 Content-Type: application/json
 
 ### Create a new address (example)
-POST http://localhost:3000/api/addresses
+POST http://localhost:3006/api/addresses
 Content-Type: application/json
 Authorization: Bearer YOUR_TOKEN_HERE
 
@@ -95,3 +95,9 @@ Content-Type: application/json
   "landmark": "Near Roundabout",
   "noStreetAddress": false
 }
+
+#####
+
+GET http://localhost:3006/api/users/me/profile
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhYTYyYWVhLTQ1MWYtNDlkOC04MDQ2LTliYWNkNzI0Yjk4NSIsImVtYWlsIjoiYWRhLm9rYWZvcityZXN0QGV4YW1wbGU0LmNvbSIsImlhdCI6MTc2MTQzMDQxMywiZXhwIjoxNzY0MDIyNDEzfQ.lqpVch6bIbVYi0Vwf3__GujQWqfGq98ovYw8GRmvmFQ
